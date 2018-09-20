@@ -38,12 +38,15 @@ func init() {
 		http.Redirect(w, r, "/debug/status", http.StatusFound)
 	})
 	http.HandleFunc(apiPrefix+"/health-check", func(w http.ResponseWriter, r *http.Request) {
-		// JSON encode response.
-		data, err := vtctl.MarshalJSON("ok")
-		if err != nil {
-			return fmt.Errorf("cannot marshal data: %v", err)
-		}
-		w.Header().Set("Content-Type", jsonContentType)
-		w.Write(data)
+		func() error {
+			// JSON encode response.
+			data, err := vtctl.MarshalJSON("ok")
+			if err != nil {
+				return fmt.Errorf("cannot marshal data: %v", err)
+			}
+			w.Header().Set("Content-Type", jsonContentType)
+			w.Write(data)
+			return nil
+		}()
 	})
 }
