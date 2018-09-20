@@ -147,7 +147,8 @@ func main() {
 	// Serve the static files for the vtctld web app.
 	http.HandleFunc(apiPrefix+"health-check", func(w http.ResponseWriter, r *http.Request) {
 		lag, err := agent.Healthy()
-		w.Write([]byte("Okay Im here. Lag=%+v, health err=%+v", lag, err))
+		msg := fmt.Sprintf("Okay Im here. Lag=%+v, health err=%+v", lag, err)
+		w.Write([]byte(msg))
 	})
 
 	servenv.RunDefault()
