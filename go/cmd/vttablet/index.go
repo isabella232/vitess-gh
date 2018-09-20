@@ -34,9 +34,9 @@ const (
 
 func init() {
 	// Anything unrecognized gets redirected to the status page.
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/debug/status", http.StatusFound)
-	})
+	// http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	// 	http.Redirect(w, r, "/debug/status", http.StatusFound)
+	// })
 	http.HandleFunc(apiPrefix+"/health-check", func(w http.ResponseWriter, r *http.Request) {
 		func() error {
 			// JSON encode response.
