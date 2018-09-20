@@ -19,6 +19,7 @@ package main
 
 import (
 	"flag"
+	"net/http"
 
 	"golang.org/x/net/context"
 	"vitess.io/vitess/go/vt/dbconfigs"
@@ -141,5 +142,12 @@ func main() {
 		// to update our state, so closing it in OnClose()
 		ts.Close()
 	})
+
+	const apiPrefix = "/api/"
+	// Serve the static files for the vtctld web app.
+	http.HandleFunc(apiPrefix+"health-check", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Okay Im here"))
+	})
+
 	servenv.RunDefault()
 }
