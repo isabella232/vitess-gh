@@ -40,6 +40,7 @@ func init() {
 			log.Exitf("Unable to create pid file '%s': %v", *pidFile, err)
 			return
 		}
+		log.Infof("pid file created: '%s'", *pidFile)
 		pidFileCreated = true
 		fmt.Fprintln(file, os.Getpid())
 		file.Close()
@@ -53,9 +54,11 @@ func init() {
 		if !pidFileCreated {
 			return
 		}
+		log.Infof("check if I can remove pid file: '%s'", *pidFile)
 
 		if err := os.Remove(*pidFile); err != nil {
 			log.Errorf("Unable to remove pid file '%s': %v", *pidFile, err)
 		}
+		log.Infof("pid file removed: '%s'", *pidFile)
 	})
 }
