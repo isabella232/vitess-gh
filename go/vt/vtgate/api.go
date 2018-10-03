@@ -102,6 +102,42 @@ func initAPI(ctx context.Context, hc discovery.HealthCheck) {
 	// Healthcheck real time status per (cell, keyspace, tablet type, metric).
 	handleCollection("health-check", func(r *http.Request) (interface{}, error) {
 		cacheStatus := hc.CacheStatus()
-		return cacheStatus, nil
+
+		itemPath := getItemPath(r.URL.Path)
+		if itemPath == "" {
+			return cacheStatus, nil
+		}
+		parts := strings.SplitN(itemPath, "/", 2)
+		filter := parts[0]
+		if filter == "" {
+			return cacheStatus, nil
+		}
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid health-check path: %q  expected path: / or /keyspace/<keyspace> or /tablet/<tablet|mysql_hostname>", itemPath)
+		}
+
+		switch parts[0] {
+		case "keyspace":
+			{
+				for _, tabletCacheStatus := range cacheStatus {
+					for tabletStats := range tabletCacheStatus.TabletsStats {
+						if tabletStats.Keyspace == parts[1] {
+							return tabletStats, nil
+						}
+					}
+				}
+			}
+		case "tablet":
+			{
+				for _, tabletCacheStatus := range cacheStatus {
+					for tabletStats := range tabletCacheStatus.TabletsStats {
+						if tabletStats.MysqlHostname == parts[1] || tabletStats.Alias.String() == parts[1] {
+							return tabletStats, nil
+						}
+					}
+				}
+			}
+		}
+		return nil, fmt.Errorf("cannot find health for: %s", itemPath)
 	})
 }
