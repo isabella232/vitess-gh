@@ -113,20 +113,30 @@ func initAPI(ctx context.Context, hc discovery.HealthCheck) {
 			return cacheStatus, nil
 		}
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid health-check path: %q  expected path: / or /keyspace/<keyspace> or /tablet/<tablet|mysql_hostname>", itemPath)
+			return nil, fmt.Errorf("invalid health-check path: %q  expected path: / or /cell/<cell> or /keyspace/<keyspace> or /tablet/<tablet|mysql_hostname>", itemPath)
 		}
 		value := parts[1]
 
 		switch collectionFilter {
-		case "keyspace":
+		case "cell":
 			{
+				filteredStatus := make(discovery.TabletsCacheStatusList, 0)
 				for _, tabletCacheStatus := range cacheStatus {
-					for _, tabletStats := range tabletCacheStatus.TabletsStats {
-						if tabletStats.Target.Keyspace == value {
-							return tabletStats, nil
-						}
+					if tabletCacheStatus.Cell == value {
+						filteredStatus = append(filteredStatus, tabletCacheStatus)
 					}
 				}
+				return filteredStatus, nil
+			}
+		case "keyspace":
+			{
+				filteredStatus := make(discovery.TabletsCacheStatusList, 0)
+				for _, tabletCacheStatus := range cacheStatus {
+					if tabletCacheStatus.Target.Keyspace == value {
+						filteredStatus = append(filteredStatus, tabletCacheStatus)
+					}
+				}
+				return filteredStatus, nil
 			}
 		case "tablet":
 			{
