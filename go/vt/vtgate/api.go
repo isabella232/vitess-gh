@@ -108,20 +108,21 @@ func initAPI(ctx context.Context, hc discovery.HealthCheck) {
 			return cacheStatus, nil
 		}
 		parts := strings.SplitN(itemPath, "/", 2)
-		filter := parts[0]
-		if filter == "" {
+		collectionFilter := parts[0]
+		if collectionFilter == "" {
 			return cacheStatus, nil
 		}
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("invalid health-check path: %q  expected path: / or /keyspace/<keyspace> or /tablet/<tablet|mysql_hostname>", itemPath)
 		}
+		value := parts[1]
 
-		switch parts[0] {
+		switch collectionFilter {
 		case "keyspace":
 			{
 				for _, tabletCacheStatus := range cacheStatus {
-					for tabletStats := range tabletCacheStatus.TabletsStats {
-						if tabletStats.Keyspace == parts[1] {
+					for _, tabletStats := range tabletCacheStatus.TabletsStats {
+						if tabletStats.Keyspace == value {
 							return tabletStats, nil
 						}
 					}
@@ -130,8 +131,8 @@ func initAPI(ctx context.Context, hc discovery.HealthCheck) {
 		case "tablet":
 			{
 				for _, tabletCacheStatus := range cacheStatus {
-					for tabletStats := range tabletCacheStatus.TabletsStats {
-						if tabletStats.MysqlHostname == parts[1] || tabletStats.Alias.String() == parts[1] {
+					for _, tabletStats := range tabletCacheStatus.TabletsStats {
+						if tabletStats.MysqlHostname == value || tabletStats.Alias.String() == value {
 							return tabletStats, nil
 						}
 					}
