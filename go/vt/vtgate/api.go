@@ -140,6 +140,7 @@ func initAPI(ctx context.Context, hc discovery.HealthCheck) {
 			}
 		case "tablet":
 			{
+				// Return a _specific tablet_
 				for _, tabletCacheStatus := range cacheStatus {
 					for _, tabletStats := range tabletCacheStatus.TabletsStats {
 						if tabletStats.Name == value || tabletStats.Tablet.MysqlHostname == value {
