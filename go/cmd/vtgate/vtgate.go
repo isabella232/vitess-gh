@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"math/rand"
 	"strings"
@@ -90,5 +91,16 @@ func main() {
 		discovery.ParseTabletURLTemplateFromFlag()
 		addStatusParts(vtg)
 	})
+
+	const apiPrefix = "/api/"
+	http.HandleFunc(apiPrefix+"health-check", func(w http.ResponseWriter, r *http.Request) {
+		cacheStatus := healthCheck.CacheStatus()
+		j, err := json.Marshal(cacheStatus)
+		if err != nil {
+			j, _ = json.Marshal(err.Error())
+		}
+		w.Write(j)
+	})
+
 	servenv.RunDefault()
 }
