@@ -93,15 +93,5 @@ func main() {
 		addStatusParts(vtg)
 	})
 
-	const apiPrefix = "/api/"
-	http.HandleFunc(apiPrefix+"health-check", func(w http.ResponseWriter, r *http.Request) {
-		cacheStatus := healthCheck.CacheStatus()
-		j, err := json.Marshal(cacheStatus)
-		if err != nil {
-			j, _ = json.Marshal(err.Error())
-		}
-		w.Write(j)
-	})
-
 	servenv.RunDefault()
 }
