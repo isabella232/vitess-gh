@@ -19,8 +19,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"net/http"
 
 	"golang.org/x/net/context"
 	"vitess.io/vitess/go/vt/dbconfigs"
@@ -143,13 +141,5 @@ func main() {
 		// to update our state, so closing it in OnClose()
 		ts.Close()
 	})
-
-	const apiPrefix = "/api/"
-	http.HandleFunc(apiPrefix+"health-check", func(w http.ResponseWriter, r *http.Request) {
-		lag, err := agent.Healthy()
-		msg := fmt.Sprintf("Okay Im here. Lag=%+v, health err=%+v, serving=%+v", lag, err, qsc.IsServing())
-		w.Write([]byte(msg))
-	})
-
 	servenv.RunDefault()
 }
