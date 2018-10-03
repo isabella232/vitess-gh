@@ -122,7 +122,7 @@ func initAPI(ctx context.Context, hc discovery.HealthCheck) {
 			{
 				for _, tabletCacheStatus := range cacheStatus {
 					for _, tabletStats := range tabletCacheStatus.TabletsStats {
-						if tabletStats.Keyspace == value {
+						if tabletStats.Target.Keyspace == value {
 							return tabletStats, nil
 						}
 					}
@@ -132,7 +132,7 @@ func initAPI(ctx context.Context, hc discovery.HealthCheck) {
 			{
 				for _, tabletCacheStatus := range cacheStatus {
 					for _, tabletStats := range tabletCacheStatus.TabletsStats {
-						if tabletStats.MysqlHostname == value || tabletStats.Alias.String() == value {
+						if tabletStats.Name == value || tabletStats.Tablet.MysqlHostname == value {
 							return tabletStats, nil
 						}
 					}
