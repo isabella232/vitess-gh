@@ -18,15 +18,14 @@ package vtgate
 
 import (
 	"encoding/json"
-	"errors"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
-	"time"
 
 	"golang.org/x/net/context"
+
+	"vitess.io/vitess/go/vt/discovery"
 )
 
 // This file implements a REST-style API for the vtgate web interface.
@@ -61,15 +60,11 @@ func handleCollection(collection string, getFunc func(*http.Request) (interface{
 		// Get the requested object.
 		obj, err := getFunc(r)
 		if err != nil {
-			if topo.IsErrType(err, topo.NoNode) {
-				http.NotFound(w, r)
-				return nil
-			}
 			return fmt.Errorf("can't get %v: %v", collection, err)
 		}
 
 		// JSON encode response.
-		data, err := vtctl.MarshalJSON(obj)
+		data, err := json.MarshalIndent(obj, "", "  ")
 		if err != nil {
 			return fmt.Errorf("cannot marshal data: %v", err)
 		}
