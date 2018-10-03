@@ -17,10 +17,8 @@ limitations under the License.
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"math/rand"
-	"net/http"
 	"strings"
 	"time"
 
