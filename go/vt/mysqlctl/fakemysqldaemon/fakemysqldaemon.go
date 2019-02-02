@@ -28,6 +28,7 @@ import (
 	"vitess.io/vitess/go/mysql/fakesqldb"
 	"vitess.io/vitess/go/sqltypes"
 	"vitess.io/vitess/go/stats"
+	"vitess.io/vitess/go/sync2"
 	"vitess.io/vitess/go/vt/dbconnpool"
 	"vitess.io/vitess/go/vt/mysqlctl"
 	"vitess.io/vitess/go/vt/mysqlctl/tmutils"
@@ -79,6 +80,9 @@ type FakeMysqlDaemon struct {
 	// If it doesn't match, SetSlavePosition will return an error.
 	SetSlavePositionPos mysql.Position
 
+	// StartSlaveUntilAfterPos is matched against the input
+	StartSlaveUntilAfterPos mysql.Position
+
 	// SetMasterInput is matched against the input of SetMaster
 	// (as "%v:%v"). If it doesn't match, SetMaster will return an error.
 	SetMasterInput string
@@ -125,7 +129,7 @@ type FakeMysqlDaemon struct {
 	FetchSuperQueryMap map[string]*sqltypes.Result
 
 	// BinlogPlayerEnabled is used by {Enable,Disable}BinlogPlayer
-	BinlogPlayerEnabled bool
+	BinlogPlayerEnabled sync2.AtomicBool
 
 	// SemiSyncMasterEnabled represents the state of rpl_semi_sync_master_enabled.
 	SemiSyncMasterEnabled bool
@@ -239,6 +243,17 @@ func (fmd *FakeMysqlDaemon) StartSlave(hookExtraEnv map[string]string) error {
 	})
 }
 
+// StartSlaveUntilAfter is part of the MysqlDaemon interface.
+func (fmd *FakeMysqlDaemon) StartSlaveUntilAfter(ctx context.Context, pos mysql.Position) error {
+	if !reflect.DeepEqual(fmd.StartSlaveUntilAfterPos, pos) {
+		return fmt.Errorf("wrong pos for StartSlaveUntilAfter: expected %v got %v", fmd.SetSlavePositionPos, pos)
+	}
+
+	return fmd.ExecuteSuperQueryList(context.Background(), []string{
+		"START SLAVE UNTIL AFTER",
+	})
+}
+
 // StopSlave is part of the MysqlDaemon interface.
 func (fmd *FakeMysqlDaemon) StopSlave(hookExtraEnv map[string]string) error {
 	return fmd.ExecuteSuperQueryList(context.Background(), []string{
@@ -345,13 +360,13 @@ func (fmd *FakeMysqlDaemon) FetchSuperQuery(ctx context.Context, query string) (
 
 // EnableBinlogPlayback is part of the MysqlDaemon interface
 func (fmd *FakeMysqlDaemon) EnableBinlogPlayback() error {
-	fmd.BinlogPlayerEnabled = true
+	fmd.BinlogPlayerEnabled.Set(true)
 	return nil
 }
 
 // DisableBinlogPlayback disable playback of binlog events
 func (fmd *FakeMysqlDaemon) DisableBinlogPlayback() error {
-	fmd.BinlogPlayerEnabled = false
+	fmd.BinlogPlayerEnabled.Set(false)
 	return nil
 }
 
@@ -380,6 +395,16 @@ func (fmd *FakeMysqlDaemon) GetSchema(dbName string, tables, excludeTables []str
 		return nil, fmt.Errorf("no schema defined")
 	}
 	return tmutils.FilterTables(fmd.Schema, tables, excludeTables, includeViews)
+}
+
+// GetColumns is part of the MysqlDaemon interface
+func (fmd *FakeMysqlDaemon) GetColumns(dbName, table string) ([]string, error) {
+	return []string{}, nil
+}
+
+// GetPrimaryKeyColumns is part of the MysqlDaemon interface
+func (fmd *FakeMysqlDaemon) GetPrimaryKeyColumns(dbName, table string) ([]string, error) {
+	return []string{}, nil
 }
 
 // PreflightSchemaChange is part of the MysqlDaemon interface

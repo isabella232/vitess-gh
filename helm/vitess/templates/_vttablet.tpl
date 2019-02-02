@@ -1,9 +1,9 @@
 ###################################
 # vttablet Service
 ###################################
-{{- define "vttablet-service" -}}
+{{ define "vttablet-service" -}}
 # set tuple values to more recognizable variables
-{{- $pmm := index . 0 -}}
+{{- $pmm := index . 0 }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -33,9 +33,9 @@ spec:
 {{- end -}}
 
 ###################################
-# vttablet 
+# vttablet
 ###################################
-{{- define "vttablet" -}}
+{{ define "vttablet" -}}
 # set tuple values to more recognizable variables
 {{- $topology := index . 0 -}}
 {{- $cell := index . 1 -}}
@@ -43,13 +43,13 @@ spec:
 {{- $shard := index . 3 -}}
 {{- $tablet := index . 4 -}}
 {{- $defaultVttablet := index . 5 -}}
-{{- $namespace := index . 6 -}}
-{{- $config := index . 7 -}}
-{{- $pmm := index . 8 -}}
-{{- $orc := index . 9 -}}
-{{- $totalTabletCount := index . 10 -}}
+{{- $defaultVtctlclient := index . 6 -}}
+{{- $namespace := index . 7 -}}
+{{- $config := index . 8 -}}
+{{- $pmm := index . 9 -}}
+{{- $orc := index . 10 -}}
 
-# sanitize inputs to create tablet name
+# sanitize inputs for labels
 {{- $cellClean := include "clean-label" $cell.name -}}
 {{- $keyspaceClean := include "clean-label" $keyspace.name -}}
 {{- $shardClean := include "clean-label" $shard.name -}}
@@ -63,7 +63,8 @@ spec:
 {{- $vitessTag := .vitessTag | default $defaultVttablet.vitessTag -}}
 {{- $image := .image | default $defaultVttablet.image -}}
 {{- $mysqlImage := .mysqlImage | default $defaultVttablet.mysqlImage -}}
-
+{{- $mysqlImage := .mysqlImage | default $defaultVttablet.mysqlImage }}
+---
 ###################################
 # vttablet StatefulSet
 ###################################
@@ -75,7 +76,7 @@ spec:
   serviceName: vttablet
   replicas: {{ .replicas | default $defaultVttablet.replicas }}
   podManagementPolicy: Parallel
-  updateStrategy: 
+  updateStrategy:
     type: RollingUpdate
   selector:
     matchLabels:
@@ -95,7 +96,7 @@ spec:
         shard: {{ $shardClean | quote }}
         type: {{ $tablet.type | quote }}
     spec:
-      terminationGracePeriodSeconds: 600
+      terminationGracePeriodSeconds: 60000000
 {{ include "pod-security" . | indent 6 }}
 {{ include "vttablet-affinity" (tuple $cellClean $keyspaceClean $shardClean $cell.region) | indent 6 }}
 
@@ -105,15 +106,24 @@ spec:
 
       containers:
 {{ include "cont-mysql" (tuple $topology $cell $keyspace $shard $tablet $defaultVttablet $uid) | indent 8 }}
-{{ include "cont-vttablet" (tuple $topology $cell $keyspace $shard $tablet $defaultVttablet $vitessTag $uid $namespace $config $orc $totalTabletCount) | indent 8 }}
+{{ include "cont-vttablet" (tuple $topology $cell $keyspace $shard $tablet $defaultVttablet $defaultVtctlclient $vitessTag $uid $namespace $config $orc) | indent 8 }}
+{{ include "cont-logrotate" . | indent 8 }}
+{{ include "cont-mysql-generallog" . | indent 8 }}
 {{ include "cont-mysql-errorlog" . | indent 8 }}
 {{ include "cont-mysql-slowlog" . | indent 8 }}
-{{ if $pmm.enabled }}{{ include "cont-pmm-client" (tuple $pmm $namespace) | indent 8 }}{{ end }}
+{{ if $pmm.enabled }}{{ include "cont-pmm-client" (tuple $pmm $namespace $keyspace) | indent 8 }}{{ end }}
 
       volumes:
         - name: vt
           emptyDir: {}
 {{ include "backup-volume" $config.backup | indent 8 }}
+{{ include "user-config-volume" (.extraMyCnf | default $defaultVttablet.extraMyCnf) | indent 8 }}
+{{ include "user-secret-volumes" (.secrets | default $defaultVttablet.secrets) | indent 8 }}
+{{ if $keyspace.pmm }}{{if $keyspace.pmm.config }}
+        - name: config
+          configMap:
+            name: {{ $keyspace.pmm.config }}
+{{ end }}{{ end }}
 
   volumeClaimTemplates:
     - metadata:
@@ -142,95 +152,8 @@ spec:
       shard: {{ $shardClean | quote }}
       type: {{ $tablet.type | quote }}
 
-{{ if eq $tablet.type "replica" }}
----
-###################################
-# vttablet InitShardMaster Job
-###################################
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: {{ $shardName }}-init-shard-master
-spec:
-  backoffLimit: 0
-  template:
-    spec:
-      restartPolicy: OnFailure
-      containers:
-      - name: init-shard-master
-        image: "vitess/vtctlclient:{{$vitessTag}}"
-
-        command: ["bash"]
-        args:
-          - "-c"
-          - |
-            set -ex
-
-            VTCTLD_SVC=vtctld.{{ $namespace }}:15999
-            SECONDS=0
-            TIMEOUT_SECONDS=600
-
-            # poll every 5 seconds to see if vtctld is ready
-            until vtctlclient -server $VTCTLD_SVC ListAllTablets {{ $cellClean }} > /dev/null 2>&1; do 
-              if (( $SECONDS > $TIMEOUT_SECONDS )); then
-                echo "timed out waiting for vtctlclient to be ready"
-                exit 1
-              fi
-              sleep 5
-            done
-
-            until [ $TABLETS_READY ]; do
-              # get all the tablets in the current cell
-              cellTablets="$(vtctlclient -server $VTCTLD_SVC ListAllTablets {{ $cellClean }})"
-              
-              # filter to only the tablets in our current shard
-              shardTablets=$( echo "$cellTablets" | awk 'substr( $5,1,{{ len $shardName }} ) == "{{ $shardName }}" {print $0}')
-
-              # check for a master tablet from the ListAllTablets call
-              masterTablet=$( echo "$shardTablets" | awk '$4 == "master" {print $1}')
-              if [ $masterTablet ]; then
-                  echo "'$masterTablet' is already the master tablet, exiting without running InitShardMaster"
-                  exit
-              fi
-
-              # check for a master tablet from the GetShard call
-              master_alias=$(vtctlclient -server $VTCTLD_SVC GetShard {{ $keyspace.name }}/{{ $shard.name }} | jq '.master_alias.uid')
-              if [ $master_alias != "null" ]; then
-                  echo "'$master_alias' is already the master tablet, exiting without running InitShardMaster"
-                  exit
-              fi
-
-              # count the number of newlines for the given shard to get the tablet count
-              tabletCount=$( echo "$shardTablets" | wc | awk '{print $1}')
-              
-              # check to see if the tablet count equals the expected tablet count
-              if [ $tabletCount == {{ $totalTabletCount }} ]; then
-                TABLETS_READY=true
-              else
-                if (( $SECONDS > $TIMEOUT_SECONDS )); then
-                  echo "timed out waiting for tablets to be ready"
-                  exit 1
-                fi
-                
-                # wait 5 seconds for vttablets to continue getting ready
-                sleep 5
-              fi
-
-            done
-
-            # find the tablet id for the "-replica-0" stateful set for a given cell, keyspace and shard
-            tablet_id=$( echo "$shardTablets" | awk 'substr( $5,1,{{ add (len $shardName) 10 }} ) == "{{ $shardName }}-replica-0" {print $1}')
-            
-            # initialize the shard master
-            until vtctlclient -server $VTCTLD_SVC InitShardMaster -force {{ $keyspace.name }}/{{ $shard.name }} $tablet_id; do 
-              if (( $SECONDS > $TIMEOUT_SECONDS )); then
-                echo "timed out waiting for InitShardMaster to succeed"
-                exit 1
-              fi
-              sleep 5
-            done
-            
-{{- end -}}
+# conditionally add cron job
+{{ include "vttablet-backup-cron" (tuple $cellClean $keyspaceClean $shardClean $shardName $keyspace $shard $vitessTag $config.backup $namespace $defaultVtctlclient) }}
 
 {{- end -}}
 {{- end -}}
@@ -238,9 +161,9 @@ spec:
 ###################################
 # init-container to copy binaries for mysql
 ###################################
-{{- define "init-mysql" -}}
+{{ define "init-mysql" -}}
 {{- $vitessTag := index . 0 -}}
-{{- $cellClean := index . 1 -}}
+{{- $cellClean := index . 1 }}
 
 - name: "init-mysql"
   image: "vitess/mysqlctld:{{$vitessTag}}"
@@ -262,7 +185,16 @@ spec:
 
       # copy necessary assets to the volumeMounts
       cp /vt/bin/mysqlctld /vttmp/bin/
+      cp /bin/busybox /vttmp/bin/
       cp -R /vt/config /vttmp/
+
+      # make sure the log files exist
+      touch /vtdataroot/tabletdata/error.log
+      touch /vtdataroot/tabletdata/slow-query.log
+      touch /vtdataroot/tabletdata/general.log
+
+      # remove the old socket file if it is still around
+      rm -f /vtdataroot/tabletdata/mysql.sock
 
 {{- end -}}
 
@@ -271,14 +203,15 @@ spec:
 # This converts the unique identity assigned by StatefulSet (pod name)
 # into a 31-bit unsigned integer for use as a Vitess tablet UID.
 ###################################
-{{- define "init-vttablet" -}}
+{{ define "init-vttablet" -}}
 {{- $vitessTag := index . 0 -}}
 {{- $cell := index . 1 -}}
 {{- $cellClean := index . 2 -}}
-{{- $namespace := index . 3 -}}
+{{- $namespace := index . 3 }}
 
 - name: init-vttablet
   image: "vitess/vtctl:{{$vitessTag}}"
+  imagePullPolicy: IfNotPresent
   volumeMounts:
     - name: vtdataroot
       mountPath: "/vtdataroot"
@@ -323,7 +256,7 @@ spec:
 ##########################
 # main vttablet container
 ##########################
-{{- define "cont-vttablet" -}}
+{{ define "cont-vttablet" -}}
 
 {{- $topology := index . 0 -}}
 {{- $cell := index . 1 -}}
@@ -331,18 +264,19 @@ spec:
 {{- $shard := index . 3 -}}
 {{- $tablet := index . 4 -}}
 {{- $defaultVttablet := index . 5 -}}
-{{- $vitessTag := index . 6 -}}
-{{- $uid := index . 7 -}}
-{{- $namespace := index . 8 -}}
-{{- $config := index . 9 -}}
-{{- $orc := index . 10 -}}
-{{- $totalTabletCount := index . 11 -}}
+{{- $defaultVtctlclient := index . 6 -}}
+{{- $vitessTag := index . 7 -}}
+{{- $uid := index . 8 -}}
+{{- $namespace := index . 9 -}}
+{{- $config := index . 10 -}}
+{{- $orc := index . 11 -}}
 
 {{- $cellClean := include "clean-label" $cell.name -}}
-{{- with $tablet.vttablet -}}
+{{- with $tablet.vttablet }}
 
 - name: vttablet
   image: "vitess/vttablet:{{$vitessTag}}"
+  imagePullPolicy: IfNotPresent
   readinessProbe:
     httpGet:
       path: /debug/health
@@ -359,6 +293,8 @@ spec:
     - name: vtdataroot
       mountPath: "/vtdataroot"
 {{ include "backup-volumeMount" $config.backup | indent 4 }}
+{{ include "user-config-volumeMount" (.extraMyCnf | default $defaultVttablet.extraMyCnf) | indent 4 }}
+{{ include "user-secret-volumeMounts" (.secrets | default $defaultVttablet.secrets) | indent 4 }}
 
   resources:
 {{ toYaml (.resources | default $defaultVttablet.resources) | indent 6 }}
@@ -377,15 +313,94 @@ spec:
           name: vitess-cm
           key: db.flavor
 
+  lifecycle:
+    preStop:
+      exec:
+        command:
+          - "bash"
+          - "-c"
+          - |
+            set -x
+
+            VTCTLD_SVC=vtctld.{{ $namespace }}:15999
+            VTCTL_EXTRA_FLAGS=({{ include "format-flags-inline" $defaultVtctlclient.extraFlags }})
+
+            master_alias_json=$(/vt/bin/vtctlclient ${VTCTL_EXTRA_FLAGS[@]} -server $VTCTLD_SVC GetShard {{ $keyspace.name }}/{{ $shard.name }})
+            master_cell=$(jq -r '.master_alias.cell' <<< "$master_alias_json")
+            master_uid=$(jq -r '.master_alias.uid' <<< "$master_alias_json")
+            master_alias=$master_cell-$master_uid
+
+            current_uid=$(cat /vtdataroot/tabletdata/tablet-uid)
+            current_alias={{ $cell.name }}-$current_uid
+
+            if [ $master_alias != $current_alias ]; then
+                # since this isn't the master, there's no reason to reparent
+                exit
+            fi
+
+            # TODO: add more robust health checks to make sure that we don't initiate a reparent
+            # if there isn't a healthy enough replica to take over
+            # - seconds behind master
+            # - use GTID_SUBTRACT
+
+            RETRY_COUNT=0
+            MAX_RETRY_COUNT=100000
+            hostname=$(hostname -s)
+
+            # retry reparenting
+            until [ $DONE_REPARENTING ]; do
+
+{{ if $orc.enabled }}
+              # tell orchestrator to not attempt a recovery for 10 seconds while we are in the middle of reparenting
+              wget -q -S -O - "http://orchestrator.{{ $namespace }}/api/begin-downtime/$hostname.vttablet/3306/preStopHook/VitessPlannedReparent/10s"
+{{ end }}
+
+              # reparent before shutting down
+              /vt/bin/vtctlclient ${VTCTL_EXTRA_FLAGS[@]} -server $VTCTLD_SVC PlannedReparentShard -keyspace_shard={{ $keyspace.name }}/{{ $shard.name }} -avoid_master=$current_alias
+
+{{ if $orc.enabled }}
+              # tell orchestrator to refresh its view of this tablet
+              wget -q -S -O - "http://orchestrator.{{ $namespace }}/api/refresh/$hostname.vttablet/3306"
+
+              # let orchestrator attempt recoveries now
+              wget -q -S -O - "http://orchestrator.{{ $namespace }}/api/end-downtime/$hostname.vttablet/3306"
+{{ end }}
+
+              # if PlannedReparentShard succeeded, then don't retry
+              if [ $? -eq 0 ]; then
+                DONE_REPARENTING=true
+
+              # if we've reached the max retry count, exit unsuccessfully
+              elif [ $RETRY_COUNT -eq $MAX_RETRY_COUNT ]; then
+                exit 1
+
+              # otherwise, increment the retry count and sleep for 10 seconds
+              else
+                let RETRY_COUNT=RETRY_COUNT+1
+                sleep 10
+              fi
+
+            done
+
+            # delete the current tablet from topology. Not strictly necessary, but helps to prevent
+            # edge cases where there are two masters
+            /vt/bin/vtctlclient ${VTCTL_EXTRA_FLAGS[@]} -server $VTCTLD_SVC DeleteTablet $current_alias
+
+
+{{ if $orc.enabled }}
+            # tell orchestrator to forget the tablet, to prevent confusion / race conditions while the tablet restarts
+            wget -q -S -O - "http://orchestrator.{{ $namespace }}/api/forget/$hostname.vttablet/3306"
+{{ end }}
+
   command: ["bash"]
   args:
     - "-c"
     - |
       set -ex
 
-{{ include "mycnf-exec" . | indent 6 }}
+{{ include "mycnf-exec" (.extraMyCnf | default $defaultVttablet.extraMyCnf) | indent 6 }}
 {{ include "backup-exec" $config.backup | indent 6 }}
-      
+
       eval exec /vt/bin/vttablet $(cat <<END_OF_COMMAND
         -topo_implementation="etcd2"
         -topo_global_server_address="etcd-global-client.{{ $namespace }}:2379"
@@ -403,6 +418,10 @@ spec:
         -health_check_interval "5s"
         -mysqlctl_socket "/vtdataroot/mysqlctl.sock"
         -enable_replication_reporter
+
+{{ if $defaultVttablet.useKeyspaceNameAsDbName }}
+        -init_db_name_override {{ $keyspace.name | quote }}
+{{ end }}
 {{ if $defaultVttablet.enableSemisync }}
         -enable_semi_sync
 {{ end }}
@@ -414,6 +433,7 @@ spec:
         -orc_discover_interval "5m"
 {{ end }}
 {{ include "backup-flags" (tuple $config.backup "vttablet") | indent 8 }}
+{{ include "format-flags-all" (tuple $defaultVttablet.extraFlags .extraFlags) | indent 8 }}
       END_OF_COMMAND
       )
 {{- end -}}
@@ -422,7 +442,7 @@ spec:
 ##########################
 # main mysql container
 ##########################
-{{- define "cont-mysql" -}}
+{{ define "cont-mysql" -}}
 
 {{- $topology := index . 0 -}}
 {{- $cell := index . 1 -}}
@@ -432,11 +452,11 @@ spec:
 {{- $defaultVttablet := index . 5 -}}
 {{- $uid := index . 6 -}}
 
-{{- with $tablet.vttablet -}}
+{{- with $tablet.vttablet }}
 
 - name: mysql
   image: {{.mysqlImage | default $defaultVttablet.mysqlImage | quote}}
-  imagePullPolicy: Always
+  imagePullPolicy: IfNotPresent
   readinessProbe:
     exec:
       command: ["mysqladmin", "ping", "-uroot", "--socket=/vtdataroot/tabletdata/mysql.sock"]
@@ -448,6 +468,8 @@ spec:
       mountPath: /vtdataroot
     - name: vt
       mountPath: /vt
+{{ include "user-config-volumeMount" (.extraMyCnf | default $defaultVttablet.extraMyCnf) | indent 4 }}
+{{ include "user-secret-volumeMounts" (.secrets | default $defaultVttablet.secrets) | indent 4 }}
   resources:
 {{ toYaml (.mysqlResources | default $defaultVttablet.mysqlResources) | indent 6 }}
   env:
@@ -459,13 +481,37 @@ spec:
           name: vitess-cm
           key: db.flavor
 
+  lifecycle:
+    preStop:
+      exec:
+        command:
+          - "bash"
+          - "-c"
+          - |
+            set -x
+
+            # block shutting down mysqlctld until vttablet shuts down first
+            until [ $VTTABLET_GONE ]; do
+
+              # poll every 5 seconds to see if vttablet is still running
+              /vt/bin/busybox wget --spider localhost:15002/debug/vars
+
+              if [ $? -ne 0 ]; then
+                VTTABLET_GONE=true
+              fi
+
+              sleep 5
+            done
+
   command: ["bash"]
   args:
     - "-c"
     - |
       set -ex
-
-{{ include "mycnf-exec" . | indent 6 }}
+{{ include "mycnf-exec" (.extraMyCnf | default $defaultVttablet.extraMyCnf) | indent 6 }}
+{{- if eq (.mysqlSize | default $defaultVttablet.mysqlSize) "test" }}
+      export EXTRA_MY_CNF="$EXTRA_MY_CNF:/vt/config/mycnf/default-fast.cnf"
+{{- end }}
 
       eval exec /vt/bin/mysqlctld $(cat <<END_OF_COMMAND
         -logtostderr=true
@@ -482,14 +528,32 @@ spec:
 {{- end -}}
 
 ##########################
+# run logrotate for all log files in /vtdataroot/tabletdata
+##########################
+{{ define "cont-logrotate" }}
+
+- name: logrotate
+  image: vitess/logrotate:helm-1.0.6
+  imagePullPolicy: IfNotPresent
+  volumeMounts:
+    - name: vtdataroot
+      mountPath: /vtdataroot
+
+{{- end -}}
+
+##########################
 # redirect the error log file to stdout
 ##########################
-{{- define "cont-mysql-errorlog" -}}
+{{ define "cont-mysql-errorlog" }}
 
 - name: error-log
-  image: busybox
-  command: ["/bin/sh"]
-  args: ["-c", "tail -n+1 -F /vtdataroot/tabletdata/error.log"]
+  image: vitess/logtail:helm-1.0.6
+  imagePullPolicy: IfNotPresent
+
+  env:
+  - name: TAIL_FILEPATH
+    value: /vtdataroot/tabletdata/error.log
+
   volumeMounts:
     - name: vtdataroot
       mountPath: /vtdataroot
@@ -498,12 +562,34 @@ spec:
 ##########################
 # redirect the slow log file to stdout
 ##########################
-{{- define "cont-mysql-slowlog" -}}
+{{ define "cont-mysql-slowlog" }}
 
 - name: slow-log
-  image: busybox
-  command: ["/bin/sh"]
-  args: ["-c", "tail -n+1 -F /vtdataroot/tabletdata/slow.log"]
+  image: vitess/logtail:helm-1.0.6
+  imagePullPolicy: IfNotPresent
+
+  env:
+  - name: TAIL_FILEPATH
+    value: /vtdataroot/tabletdata/slow-query.log
+
+  volumeMounts:
+    - name: vtdataroot
+      mountPath: /vtdataroot
+{{- end -}}
+
+##########################
+# redirect the general log file to stdout
+##########################
+{{ define "cont-mysql-generallog" }}
+
+- name: general-log
+  image: vitess/logtail:helm-1.0.6
+  imagePullPolicy: IfNotPresent
+
+  env:
+  - name: TAIL_FILEPATH
+    value: /vtdataroot/tabletdata/general.log
+
   volumeMounts:
     - name: vtdataroot
       mountPath: /vtdataroot
@@ -512,12 +598,12 @@ spec:
 ###################################
 # vttablet-affinity sets node/pod affinities
 ###################################
-{{- define "vttablet-affinity" -}}
+{{ define "vttablet-affinity" -}}
 # set tuple values to more recognizable variables
 {{- $cellClean := index . 0 -}}
 {{- $keyspaceClean := index . 1 -}}
 {{- $shardClean := index . 2 -}}
-{{- $region := index . 3 -}}
+{{- $region := index . 3 }}
 
 # affinity pod spec
 affinity:
@@ -548,7 +634,7 @@ affinity:
             cell: {{ $cellClean | quote }}
             keyspace: {{ $keyspaceClean | quote }}
             shard: {{ $shardClean | quote }}
-    
+
     # prefer to stay away from any vttablets
     - weight: 10
       podAffinityTerm:

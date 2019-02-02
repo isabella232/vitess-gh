@@ -171,7 +171,7 @@ func (tc *legacySplitCloneTestCase) setUp(v3 bool) {
 			},
 		}
 		sourceRdonly.FakeMysqlDaemon.CurrentMasterPosition = mysql.Position{
-			GTIDSet: mysql.MariadbGTID{Domain: 12, Server: 34, Sequence: 5678},
+			GTIDSet: mysql.MariadbGTIDSet{mysql.MariadbGTID{Domain: 12, Server: 34, Sequence: 5678}},
 		}
 		sourceRdonly.FakeMysqlDaemon.ExpectedExecuteSuperQueryList = []string{
 			"STOP SLAVE",
@@ -180,7 +180,7 @@ func (tc *legacySplitCloneTestCase) setUp(v3 bool) {
 		qs := fakes.NewStreamHealthQueryService(sourceRdonly.Target())
 		qs.AddDefaultHealthResponse()
 		grpcqueryservice.Register(sourceRdonly.RPCServer, &legacyTestQueryService{
-			t: tc.t,
+			t:                        tc.t,
 			StreamHealthQueryService: qs,
 		})
 	}
@@ -238,7 +238,7 @@ type legacyTestQueryService struct {
 	*fakes.StreamHealthQueryService
 }
 
-func (sq *legacyTestQueryService) StreamExecute(ctx context.Context, target *querypb.Target, sql string, bindVariables map[string]*querypb.BindVariable, options *querypb.ExecuteOptions, callback func(reply *sqltypes.Result) error) error {
+func (sq *legacyTestQueryService) StreamExecute(ctx context.Context, target *querypb.Target, sql string, bindVariables map[string]*querypb.BindVariable, transactionID int64, options *querypb.ExecuteOptions, callback func(reply *sqltypes.Result) error) error {
 	// Custom parsing of the query we expect.
 	min := legacySplitCloneTestMin
 	max := legacySplitCloneTestMax

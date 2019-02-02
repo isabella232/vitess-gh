@@ -164,13 +164,29 @@ func isDbDir(p string) bool {
 		return true
 	}
 
-	// Look for at least one .frm file
+	// Look for at least one database file
 	fis, err := ioutil.ReadDir(p)
 	if err != nil {
 		return false
 	}
 	for _, fi := range fis {
 		if strings.HasSuffix(fi.Name(), ".frm") {
+			return true
+		}
+
+		// the MyRocks engine stores data in RocksDB .sst files
+		// https://github.com/facebook/rocksdb/wiki/Rocksdb-BlockBasedTable-Format
+		if strings.HasSuffix(fi.Name(), ".sst") {
+			return true
+		}
+
+		// .frm files were removed in MySQL 8, so we need to check for two other file types
+		// https://dev.mysql.com/doc/refman/8.0/en/data-dictionary-file-removal.html
+		if strings.HasSuffix(fi.Name(), ".ibd") {
+			return true
+		}
+		// https://dev.mysql.com/doc/refman/8.0/en/serialized-dictionary-information.html
+		if strings.HasSuffix(fi.Name(), ".sdi") {
 			return true
 		}
 	}
@@ -194,6 +210,26 @@ func addDirectory(fes []FileEntry, base string, baseDir string, subDir string) (
 	return fes, nil
 }
 
+// addMySQL8DataDictionary checks to see if the new data dictionary introduced in MySQL 8 exists
+// and adds it to the backup manifest if it does
+// https://dev.mysql.com/doc/refman/8.0/en/data-dictionary-transactional-storage.html
+func addMySQL8DataDictionary(fes []FileEntry, base string, baseDir string) ([]FileEntry, error) {
+	const dataDictionaryFile = "mysql.ibd"
+	filePath := path.Join(baseDir, dataDictionaryFile)
+
+	// no-op if this file doesn't exist
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return fes, nil
+	}
+
+	fes = append(fes, FileEntry{
+		Base: base,
+		Name: dataDictionaryFile,
+	})
+
+	return fes, nil
+}
+
 func findFilesToBackup(cnf *Mycnf) ([]FileEntry, error) {
 	var err error
 	var result []FileEntry
@@ -204,6 +240,12 @@ func findFilesToBackup(cnf *Mycnf) ([]FileEntry, error) {
 		return nil, err
 	}
 	result, err = addDirectory(result, backupInnodbLogGroupHomeDir, cnf.InnodbLogGroupHomeDir, "")
+	if err != nil {
+		return nil, err
+	}
+
+	// then add the transactional data dictionary if it exists
+	result, err = addMySQL8DataDictionary(result, backupData, cnf.DataDir)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +290,7 @@ func Backup(ctx context.Context, cnf *Mycnf, mysqld MysqlDaemon, logger logutil.
 	if usable {
 		finishErr = bh.EndBackup(ctx)
 	} else {
-		logger.Errorf("backup is not usable, aborting it: %v", err)
+		logger.Errorf2(err, "backup is not usable, aborting it")
 		finishErr = bh.AbortBackup(ctx)
 	}
 	if err != nil {
@@ -256,7 +298,7 @@ func Backup(ctx context.Context, cnf *Mycnf, mysqld MysqlDaemon, logger logutil.
 			// We have a backup error, and we also failed
 			// to finish the backup: just log the backup
 			// finish error, return the backup error.
-			logger.Errorf("failed to finish backup: %v", finishErr)
+			logger.Errorf2(finishErr, "failed to finish backup: %v")
 		}
 		return err
 	}
@@ -457,7 +499,7 @@ func backupFile(ctx context.Context, cnf *Mycnf, mysqld MysqlDaemon, logger logu
 		if rerr := wc.Close(); rerr != nil {
 			if err != nil {
 				// We already have an error, just log this one.
-				logger.Errorf("failed to close file %v: %v", name, rerr)
+				logger.Errorf2(rerr, "failed to close file %v", name)
 			} else {
 				err = rerr
 			}
@@ -761,7 +803,7 @@ func Restore(
 		}
 		if !ok {
 			logger.Infof("Auto-restore is enabled, but mysqld already contains data. Assuming vttablet was just restarted.")
-			if err = populateMetadataTables(mysqld, localMetadata); err == nil {
+			if err = PopulateMetadataTables(mysqld, localMetadata); err == nil {
 				err = ErrExistingDB
 			}
 			return mysql.Position{}, err
@@ -784,7 +826,13 @@ func Restore(
 	if len(bhs) == 0 {
 		// There are no backups (not even broken/incomplete ones).
 		logger.Errorf("No backup to restore on BackupStorage for directory %v. Starting up empty.", dir)
-		if err = populateMetadataTables(mysqld, localMetadata); err == nil {
+		// Since this Was an empty database make sure we start replication at the beginning
+		if err = mysqld.ResetReplication(ctx); err == nil {
+			logger.Errorf("Error reseting slave replication: %v. Continuing", err)
+			err = ErrNoBackup
+		}
+
+		if err = PopulateMetadataTables(mysqld, localMetadata); err == nil {
 			err = ErrNoBackup
 		}
 		return mysql.Position{}, err
@@ -865,7 +913,7 @@ func Restore(
 	// Populate local_metadata before starting without --skip-networking,
 	// so it's there before we start announcing ourselves.
 	logger.Infof("Restore: populating local_metadata")
-	err = populateMetadataTables(mysqld, localMetadata)
+	err = PopulateMetadataTables(mysqld, localMetadata)
 	if err != nil {
 		return mysql.Position{}, err
 	}

@@ -24,23 +24,26 @@ import (
 	"fmt"
 	"time"
 
+	"vitess.io/vitess/go/vt/vterrors"
+
 	"golang.org/x/net/context"
 	"vitess.io/vitess/go/flagutil"
 	"vitess.io/vitess/go/netutil"
 	"vitess.io/vitess/go/vt/log"
+	"vitess.io/vitess/go/vt/mysqlctl"
+	topodatapb "vitess.io/vitess/go/vt/proto/topodata"
 	"vitess.io/vitess/go/vt/topo"
 	"vitess.io/vitess/go/vt/topo/topoproto"
-
-	topodatapb "vitess.io/vitess/go/vt/proto/topodata"
 )
 
 var (
-	initDbNameOverride = flag.String("init_db_name_override", "", "(init parameter) override the name of the db used by vttablet")
-	initKeyspace       = flag.String("init_keyspace", "", "(init parameter) keyspace to use for this tablet")
-	initShard          = flag.String("init_shard", "", "(init parameter) shard to use for this tablet")
-	initTags           flagutil.StringMapValue
-	initTabletType     = flag.String("init_tablet_type", "", "(init parameter) the tablet type to use for this tablet.")
-	initTimeout        = flag.Duration("init_timeout", 1*time.Minute, "(init parameter) timeout to use for the init phase.")
+	initDbNameOverride   = flag.String("init_db_name_override", "", "(init parameter) override the name of the db used by vttablet")
+	initKeyspace         = flag.String("init_keyspace", "", "(init parameter) keyspace to use for this tablet")
+	initShard            = flag.String("init_shard", "", "(init parameter) shard to use for this tablet")
+	initTags             flagutil.StringMapValue
+	initTabletType       = flag.String("init_tablet_type", "", "(init parameter) the tablet type to use for this tablet.")
+	initTimeout          = flag.Duration("init_timeout", 1*time.Minute, "(init parameter) timeout to use for the init phase.")
+	initPopulateMetadata = flag.Bool("init_populate_metadata", false, "(init parameter) populate metadata tables")
 )
 
 func init() {
@@ -62,7 +65,7 @@ func (agent *ActionAgent) InitTablet(port, gRPCPort int32) error {
 	// parse init_tablet_type
 	tabletType, err := topoproto.ParseTabletType(*initTabletType)
 	if err != nil {
-		return fmt.Errorf("invalid init_tablet_type %v: %v", *initTabletType, err)
+		return vterrors.Wrapf(err, "invalid init_tablet_type %v", *initTabletType)
 	}
 	if tabletType == topodatapb.TabletType_MASTER {
 		// We disallow MASTER, so we don't have to change
@@ -73,7 +76,7 @@ func (agent *ActionAgent) InitTablet(port, gRPCPort int32) error {
 	// parse and validate shard name
 	shard, keyRange, err := topo.ValidateShardName(*initShard)
 	if err != nil {
-		return fmt.Errorf("cannot validate shard name %v: %v", *initShard, err)
+		return vterrors.Wrapf(err, "cannot validate shard name %v", *initShard)
 	}
 
 	// Create a context for this whole operation.  Note we will
@@ -89,7 +92,7 @@ func (agent *ActionAgent) InitTablet(port, gRPCPort int32) error {
 		si, err = agent.TopoServer.GetOrCreateShard(ctx, *initKeyspace, shard)
 		return err
 	}); err != nil {
-		return fmt.Errorf("InitTablet cannot GetOrCreateShard shard: %v", err)
+		return vterrors.Wrap(err, "InitTablet cannot GetOrCreateShard shard")
 	}
 	if si.MasterAlias != nil && topoproto.TabletAliasEqual(si.MasterAlias, agent.TabletAlias) {
 		// We're marked as master in the shard record, which could mean the master
@@ -115,7 +118,7 @@ func (agent *ActionAgent) InitTablet(port, gRPCPort int32) error {
 				agent.setExternallyReparentedTime(time.Now())
 			}
 		default:
-			return fmt.Errorf("InitTablet failed to read existing tablet record: %v", err)
+			return vterrors.Wrap(err, "InitTablet failed to read existing tablet record")
 		}
 	}
 
@@ -132,7 +135,7 @@ func (agent *ActionAgent) InitTablet(port, gRPCPort int32) error {
 			})
 			return err
 		}); err != nil {
-			return fmt.Errorf("couldn't add tablet's cell to shard record: %v", err)
+			return vterrors.Wrap(err, "couldn't add tablet's cell to shard record")
 		}
 	}
 	log.Infof("Initializing the tablet for type %v", tabletType)
@@ -179,7 +182,7 @@ func (agent *ActionAgent) InitTablet(port, gRPCPort int32) error {
 		// it. So we read it first.
 		oldTablet, err := agent.TopoServer.GetTablet(ctx, tablet.Alias)
 		if err != nil {
-			return fmt.Errorf("InitTablet failed to read existing tablet record: %v", err)
+			return vterrors.Wrap(err, "InitTablet failed to read existing tablet record")
 		}
 
 		// Sanity check the keyspace and shard
@@ -198,10 +201,20 @@ func (agent *ActionAgent) InitTablet(port, gRPCPort int32) error {
 
 		// Then overwrite everything, ignoring version mismatch.
 		if err := agent.TopoServer.UpdateTablet(ctx, topo.NewTabletInfo(tablet, nil)); err != nil {
-			return fmt.Errorf("UpdateTablet failed: %v", err)
+			return vterrors.Wrap(err, "UpdateTablet failed")
 		}
 	default:
-		return fmt.Errorf("CreateTablet failed: %v", err)
+		return vterrors.Wrap(err, "CreateTablet failed")
+	}
+
+	// optionally populate metadata records
+	if *initPopulateMetadata {
+		agent.setTablet(tablet)
+		localMetadata := agent.getLocalMetadataValues(tablet.Type)
+		err := mysqlctl.PopulateMetadataTables(agent.MysqlDaemon, localMetadata)
+		if err != nil {
+			return vterrors.Wrap(err, "failed to -init_populate_metadata")
+		}
 	}
 
 	return nil

@@ -22,6 +22,8 @@ import (
 	"sort"
 	"sync"
 
+	"vitess.io/vitess/go/vt/vterrors"
+
 	"golang.org/x/net/context"
 
 	"vitess.io/vitess/go/sqltypes"
@@ -94,6 +96,8 @@ func (sdw *SplitDiffWorker) StatusAsHTML() template.HTML {
 	switch state {
 	case WorkerStateDiff:
 		result += "<b>Running...</b></br>\n"
+	case WorkerStateDiffWillFail:
+		result += "<b>Running - have already found differences...</b></br>\n"
 	case WorkerStateDone:
 		result += "<b>Success.</b></br>\n"
 	}
@@ -110,6 +114,8 @@ func (sdw *SplitDiffWorker) StatusAsText() string {
 	switch state {
 	case WorkerStateDiff:
 		result += "Running...\n"
+	case WorkerStateDiffWillFail:
+		result += "Running - have already found differences...\n"
 	case WorkerStateDone:
 		result += "Success.\n"
 	}
@@ -125,13 +131,13 @@ func (sdw *SplitDiffWorker) Run(ctx context.Context) error {
 	cerr := sdw.cleaner.CleanUp(sdw.wr)
 	if cerr != nil {
 		if err != nil {
-			sdw.wr.Logger().Errorf("CleanUp failed in addition to job error: %v", cerr)
+			sdw.wr.Logger().Errorf2(cerr, "CleanUp failed in addition to job error")
 		} else {
 			err = cerr
 		}
 	}
 	if err != nil {
-		sdw.wr.Logger().Errorf("Run() error: %v", err)
+		sdw.wr.Logger().Errorf2(err, "Run() error")
 		sdw.SetState(WorkerStateError)
 		return err
 	}
@@ -142,7 +148,7 @@ func (sdw *SplitDiffWorker) Run(ctx context.Context) error {
 func (sdw *SplitDiffWorker) run(ctx context.Context) error {
 	// first state: read what we need to do
 	if err := sdw.init(ctx); err != nil {
-		return fmt.Errorf("init() failed: %v", err)
+		return vterrors.Wrap(err, "init() failed")
 	}
 	if err := checkDone(ctx); err != nil {
 		return err
@@ -150,7 +156,7 @@ func (sdw *SplitDiffWorker) run(ctx context.Context) error {
 
 	// second state: find targets
 	if err := sdw.findTargets(ctx); err != nil {
-		return fmt.Errorf("findTargets() failed: %v", err)
+		return vterrors.Wrap(err, "findTargets() failed")
 	}
 	if err := checkDone(ctx); err != nil {
 		return err
@@ -158,7 +164,7 @@ func (sdw *SplitDiffWorker) run(ctx context.Context) error {
 
 	// third phase: synchronize replication
 	if err := sdw.synchronizeReplication(ctx); err != nil {
-		return fmt.Errorf("synchronizeReplication() failed: %v", err)
+		return vterrors.Wrap(err, "synchronizeReplication() failed")
 	}
 	if err := checkDone(ctx); err != nil {
 		return err
@@ -166,7 +172,7 @@ func (sdw *SplitDiffWorker) run(ctx context.Context) error {
 
 	// fourth phase: diff
 	if err := sdw.diff(ctx); err != nil {
-		return fmt.Errorf("diff() failed: %v", err)
+		return vterrors.Wrap(err, "diff() failed")
 	}
 	if err := checkDone(ctx); err != nil {
 		return err
@@ -185,13 +191,13 @@ func (sdw *SplitDiffWorker) init(ctx context.Context) error {
 	sdw.keyspaceInfo, err = sdw.wr.TopoServer().GetKeyspace(shortCtx, sdw.keyspace)
 	cancel()
 	if err != nil {
-		return fmt.Errorf("cannot read keyspace %v: %v", sdw.keyspace, err)
+		return vterrors.Wrapf(err, "cannot read keyspace %v", sdw.keyspace)
 	}
 	shortCtx, cancel = context.WithTimeout(ctx, *remoteActionsTimeout)
 	sdw.shardInfo, err = sdw.wr.TopoServer().GetShard(shortCtx, sdw.keyspace, sdw.shard)
 	cancel()
 	if err != nil {
-		return fmt.Errorf("cannot read shard %v/%v: %v", sdw.keyspace, sdw.shard, err)
+		return vterrors.Wrapf(err, "cannot read shard %v/%v", sdw.keyspace, sdw.shard)
 	}
 
 	if len(sdw.shardInfo.SourceShards) == 0 {
@@ -243,7 +249,7 @@ func (sdw *SplitDiffWorker) findTargets(ctx context.Context) error {
 		sdw.destinationTabletType,
 	)
 	if err != nil {
-		return fmt.Errorf("FindWorkerTablet() failed for %v/%v/%v: %v", sdw.cell, sdw.keyspace, sdw.shard, err)
+		return vterrors.Wrapf(err, "FindWorkerTablet() failed for %v/%v/%v", sdw.cell, sdw.keyspace, sdw.shard)
 	}
 
 	// find an appropriate tablet in the source shard
@@ -295,7 +301,7 @@ func (sdw *SplitDiffWorker) synchronizeReplication(ctx context.Context) error {
 	defer cancel()
 	masterInfo, err := sdw.wr.TopoServer().GetTablet(shortCtx, sdw.shardInfo.MasterAlias)
 	if err != nil {
-		return fmt.Errorf("synchronizeReplication: cannot get Tablet record for master %v: %v", sdw.shardInfo.MasterAlias, err)
+		return vterrors.Wrapf(err, "synchronizeReplication: cannot get Tablet record for master %v", sdw.shardInfo.MasterAlias)
 	}
 
 	// 1 - stop the master binlog replication, get its current position
@@ -304,12 +310,12 @@ func (sdw *SplitDiffWorker) synchronizeReplication(ctx context.Context) error {
 	defer cancel()
 	_, err = sdw.wr.TabletManagerClient().VReplicationExec(shortCtx, masterInfo.Tablet, binlogplayer.StopVReplication(sdw.sourceShard.Uid, "for split diff"))
 	if err != nil {
-		return fmt.Errorf("VReplicationExec(stop) for %v failed: %v", sdw.shardInfo.MasterAlias, err)
+		return vterrors.Wrapf(err, "VReplicationExec(stop) for %v failed", sdw.shardInfo.MasterAlias)
 	}
 	wrangler.RecordVReplicationAction(sdw.cleaner, masterInfo.Tablet, binlogplayer.StartVReplication(sdw.sourceShard.Uid))
 	p3qr, err := sdw.wr.TabletManagerClient().VReplicationExec(shortCtx, masterInfo.Tablet, binlogplayer.ReadVReplicationPos(sdw.sourceShard.Uid))
 	if err != nil {
-		return fmt.Errorf("VReplicationExec(stop) for %v failed: %v", sdw.shardInfo.MasterAlias, err)
+		return vterrors.Wrapf(err, "VReplicationExec(stop) for %v failed", sdw.shardInfo.MasterAlias)
 	}
 	qr := sqltypes.Proto3ToResult(p3qr)
 	if len(qr.Rows) != 1 || len(qr.Rows[0]) != 1 {
@@ -329,7 +335,7 @@ func (sdw *SplitDiffWorker) synchronizeReplication(ctx context.Context) error {
 	defer cancel()
 	mysqlPos, err := sdw.wr.TabletManagerClient().StopSlaveMinimum(shortCtx, sourceTablet.Tablet, vreplicationPos, *remoteActionsTimeout)
 	if err != nil {
-		return fmt.Errorf("cannot stop slave %v at right binlog position %v: %v", sdw.sourceAlias, vreplicationPos, err)
+		return vterrors.Wrapf(err, "cannot stop slave %v at right binlog position %v", sdw.sourceAlias, vreplicationPos)
 	}
 
 	// change the cleaner actions from ChangeSlaveType(rdonly)
@@ -343,14 +349,14 @@ func (sdw *SplitDiffWorker) synchronizeReplication(ctx context.Context) error {
 	defer cancel()
 	_, err = sdw.wr.TabletManagerClient().VReplicationExec(shortCtx, masterInfo.Tablet, binlogplayer.StartVReplicationUntil(sdw.sourceShard.Uid, mysqlPos))
 	if err != nil {
-		return fmt.Errorf("VReplication(start until) for %v until %v failed: %v", sdw.shardInfo.MasterAlias, mysqlPos, err)
+		return vterrors.Wrapf(err, "VReplication(start until) for %v until %v failed", sdw.shardInfo.MasterAlias, mysqlPos)
 	}
 	if err := sdw.wr.TabletManagerClient().VReplicationWaitForPos(shortCtx, masterInfo.Tablet, int(sdw.sourceShard.Uid), mysqlPos); err != nil {
-		return fmt.Errorf("VReplicationWaitForPos for %v until %v failed: %v", sdw.shardInfo.MasterAlias, mysqlPos, err)
+		return vterrors.Wrapf(err, "VReplicationWaitForPos for %v until %v failed", sdw.shardInfo.MasterAlias, mysqlPos)
 	}
 	masterPos, err := sdw.wr.TabletManagerClient().MasterPosition(shortCtx, masterInfo.Tablet)
 	if err != nil {
-		return fmt.Errorf("MasterPosition for %v failed: %v", sdw.shardInfo.MasterAlias, err)
+		return vterrors.Wrapf(err, "MasterPosition for %v failed", sdw.shardInfo.MasterAlias)
 	}
 
 	// 4 - wait until the destination tablet is equal or passed
@@ -365,7 +371,7 @@ func (sdw *SplitDiffWorker) synchronizeReplication(ctx context.Context) error {
 	shortCtx, cancel = context.WithTimeout(ctx, *remoteActionsTimeout)
 	defer cancel()
 	if _, err = sdw.wr.TabletManagerClient().StopSlaveMinimum(shortCtx, destinationTablet.Tablet, masterPos, *remoteActionsTimeout); err != nil {
-		return fmt.Errorf("StopSlaveMinimum for %v at %v failed: %v", sdw.destinationAlias, masterPos, err)
+		return vterrors.Wrapf(err, "StopSlaveMinimum for %v at %v failed", sdw.destinationAlias, masterPos)
 	}
 	wrangler.RecordStartSlaveAction(sdw.cleaner, destinationTablet.Tablet)
 
@@ -374,7 +380,7 @@ func (sdw *SplitDiffWorker) synchronizeReplication(ctx context.Context) error {
 	shortCtx, cancel = context.WithTimeout(ctx, *remoteActionsTimeout)
 	defer cancel()
 	if _, err = sdw.wr.TabletManagerClient().VReplicationExec(ctx, masterInfo.Tablet, binlogplayer.StartVReplication(sdw.sourceShard.Uid)); err != nil {
-		return fmt.Errorf("VReplicationExec(start) failed for %v: %v", sdw.shardInfo.MasterAlias, err)
+		return vterrors.Wrapf(err, "VReplicationExec(start) failed for %v", sdw.shardInfo.MasterAlias)
 	}
 
 	return nil
@@ -398,7 +404,9 @@ func (sdw *SplitDiffWorker) diff(ctx context.Context) error {
 		sdw.destinationSchemaDefinition, err = sdw.wr.GetSchema(
 			shortCtx, sdw.destinationAlias, nil /* tables */, sdw.excludeTables, false /* includeViews */)
 		cancel()
-		rec.RecordError(err)
+		if err != nil {
+			sdw.markAsWillFail(rec, err)
+		}
 		sdw.wr.Logger().Infof("Got schema from destination %v", sdw.destinationAlias)
 		wg.Done()
 	}()
@@ -409,7 +417,9 @@ func (sdw *SplitDiffWorker) diff(ctx context.Context) error {
 		sdw.sourceSchemaDefinition, err = sdw.wr.GetSchema(
 			shortCtx, sdw.sourceAlias, nil /* tables */, sdw.excludeTables, false /* includeViews */)
 		cancel()
-		rec.RecordError(err)
+		if err != nil {
+			sdw.markAsWillFail(rec, err)
+		}
 		sdw.wr.Logger().Infof("Got schema from source %v", sdw.sourceAlias)
 		wg.Done()
 	}()
@@ -433,7 +443,7 @@ func (sdw *SplitDiffWorker) diff(ctx context.Context) error {
 	if *useV3ReshardingMode {
 		kschema, err := sdw.wr.TopoServer().GetVSchema(ctx, sdw.keyspace)
 		if err != nil {
-			return fmt.Errorf("cannot load VSchema for keyspace %v: %v", sdw.keyspace, err)
+			return vterrors.Wrapf(err, "cannot load VSchema for keyspace %v", sdw.keyspace)
 		}
 		if kschema == nil {
 			return fmt.Errorf("no VSchema for keyspace %v", sdw.keyspace)
@@ -441,7 +451,7 @@ func (sdw *SplitDiffWorker) diff(ctx context.Context) error {
 
 		keyspaceSchema, err = vindexes.BuildKeyspaceSchema(kschema, sdw.keyspace)
 		if err != nil {
-			return fmt.Errorf("cannot build vschema for keyspace %v: %v", sdw.keyspace, err)
+			return vterrors.Wrapf(err, "cannot build vschema for keyspace %v", sdw.keyspace)
 		}
 	}
 
@@ -451,7 +461,7 @@ func (sdw *SplitDiffWorker) diff(ctx context.Context) error {
 	// we'll filter.
 	overlap, err := key.KeyRangesOverlap(sdw.shardInfo.KeyRange, sdw.sourceShard.KeyRange)
 	if err != nil {
-		return fmt.Errorf("Source shard doesn't overlap with destination: %v", err)
+		return vterrors.Wrap(err, "Source shard doesn't overlap with destination")
 	}
 
 	// run the diffs, 8 at a time
@@ -492,9 +502,9 @@ func (sdw *SplitDiffWorker) diff(ctx context.Context) error {
 				sourceQueryResultReader, err = TableScanByKeyRange(ctx, sdw.wr.Logger(), sdw.wr.TopoServer(), sdw.sourceAlias, tableDefinition, overlap, keyspaceSchema, sdw.keyspaceInfo.ShardingColumnName, sdw.keyspaceInfo.ShardingColumnType)
 			}
 			if err != nil {
-				newErr := fmt.Errorf("TableScan(ByKeyRange?)(source) failed: %v", err)
-				rec.RecordError(newErr)
-				sdw.wr.Logger().Errorf("%v", newErr)
+				newErr := vterrors.Wrap(err, "TableScan(ByKeyRange?)(source) failed")
+				sdw.markAsWillFail(rec, newErr)
+				sdw.wr.Logger().Error(newErr)
 				return
 			}
 			defer sourceQueryResultReader.Close(ctx)
@@ -508,9 +518,9 @@ func (sdw *SplitDiffWorker) diff(ctx context.Context) error {
 				destinationQueryResultReader, err = TableScanByKeyRange(ctx, sdw.wr.Logger(), sdw.wr.TopoServer(), sdw.destinationAlias, tableDefinition, overlap, keyspaceSchema, sdw.keyspaceInfo.ShardingColumnName, sdw.keyspaceInfo.ShardingColumnType)
 			}
 			if err != nil {
-				newErr := fmt.Errorf("TableScan(ByKeyRange?)(destination) failed: %v", err)
-				rec.RecordError(newErr)
-				sdw.wr.Logger().Errorf("%v", newErr)
+				newErr := vterrors.Wrap(err, "TableScan(ByKeyRange?)(destination) failed")
+				sdw.markAsWillFail(rec, newErr)
+				sdw.wr.Logger().Error(newErr)
 				return
 			}
 			defer destinationQueryResultReader.Close(ctx)
@@ -518,9 +528,9 @@ func (sdw *SplitDiffWorker) diff(ctx context.Context) error {
 			// Create the row differ.
 			differ, err := NewRowDiffer(sourceQueryResultReader, destinationQueryResultReader, tableDefinition)
 			if err != nil {
-				newErr := fmt.Errorf("NewRowDiffer() failed: %v", err)
-				rec.RecordError(newErr)
-				sdw.wr.Logger().Errorf("%v", newErr)
+				newErr := vterrors.Wrap(err, "NewRowDiffer() failed")
+				sdw.markAsWillFail(rec, newErr)
+				sdw.wr.Logger().Error(newErr)
 				return
 			}
 
@@ -528,12 +538,12 @@ func (sdw *SplitDiffWorker) diff(ctx context.Context) error {
 			report, err := differ.Go(sdw.wr.Logger())
 			if err != nil {
 				newErr := fmt.Errorf("Differ.Go failed: %v", err.Error())
-				rec.RecordError(newErr)
-				sdw.wr.Logger().Errorf("%v", newErr)
+				sdw.markAsWillFail(rec, newErr)
+				sdw.wr.Logger().Error(newErr)
 			} else {
 				if report.HasDifferences() {
 					err := fmt.Errorf("Table %v has differences: %v", tableDefinition.Name, report.String())
-					rec.RecordError(err)
+					sdw.markAsWillFail(rec, err)
 					sdw.wr.Logger().Warningf(err.Error())
 				} else {
 					sdw.wr.Logger().Infof("Table %v checks out (%v rows processed, %v qps)", tableDefinition.Name, report.processedRows, report.processingQPS)
@@ -546,4 +556,10 @@ func (sdw *SplitDiffWorker) diff(ctx context.Context) error {
 	wg.Wait()
 
 	return rec.Error()
+}
+
+// markAsWillFail records the error and changes the state of the worker to reflect this
+func (sdw *SplitDiffWorker) markAsWillFail(er concurrency.ErrorRecorder, err error) {
+	er.RecordError(err)
+	sdw.SetState(WorkerStateDiffWillFail)
 }

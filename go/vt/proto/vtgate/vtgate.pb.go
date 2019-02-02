@@ -53,7 +53,7 @@ func (x TransactionMode) String() string {
 	return proto.EnumName(TransactionMode_name, int32(x))
 }
 func (TransactionMode) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{0}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{0}
 }
 
 // Session objects are exchanged like cookies through various
@@ -68,35 +68,37 @@ func (TransactionMode) EnumDescriptor() ([]byte, []int) {
 // an optional parameter for the V2 APIs.
 type Session struct {
 	// in_transaction is set to true if the session is in a transaction.
-	InTransaction bool `protobuf:"varint,1,opt,name=in_transaction,json=inTransaction" json:"in_transaction,omitempty"`
+	InTransaction bool `protobuf:"varint,1,opt,name=in_transaction,json=inTransaction,proto3" json:"in_transaction,omitempty"`
 	// shard_sessions keep track of per-shard transaction info.
-	ShardSessions []*Session_ShardSession `protobuf:"bytes,2,rep,name=shard_sessions,json=shardSessions" json:"shard_sessions,omitempty"`
+	ShardSessions []*Session_ShardSession `protobuf:"bytes,2,rep,name=shard_sessions,json=shardSessions,proto3" json:"shard_sessions,omitempty"`
 	// single_db is deprecated. Use transaction_mode instead.
 	// The value specifies if the transaction should be restricted
 	// to a single shard.
 	// TODO(sougou): remove in 3.1
-	SingleDb bool `protobuf:"varint,3,opt,name=single_db,json=singleDb" json:"single_db,omitempty"`
+	SingleDb bool `protobuf:"varint,3,opt,name=single_db,json=singleDb,proto3" json:"single_db,omitempty"`
 	// autocommit specifies if the session is in autocommit mode.
 	// This is used only for V3.
-	Autocommit bool `protobuf:"varint,4,opt,name=autocommit" json:"autocommit,omitempty"`
+	Autocommit bool `protobuf:"varint,4,opt,name=autocommit,proto3" json:"autocommit,omitempty"`
 	// target_string is the target expressed as a string. Valid
 	// names are: keyspace:shard@target, keyspace@target or @target.
 	// This is used only for V3.
-	TargetString string `protobuf:"bytes,5,opt,name=target_string,json=targetString" json:"target_string,omitempty"`
+	TargetString string `protobuf:"bytes,5,opt,name=target_string,json=targetString,proto3" json:"target_string,omitempty"`
 	// options is used only for V3.
-	Options *query.ExecuteOptions `protobuf:"bytes,6,opt,name=options" json:"options,omitempty"`
+	Options *query.ExecuteOptions `protobuf:"bytes,6,opt,name=options,proto3" json:"options,omitempty"`
 	// transaction_mode specifies the current transaction mode.
-	TransactionMode      TransactionMode `protobuf:"varint,7,opt,name=transaction_mode,json=transactionMode,enum=vtgate.TransactionMode" json:"transaction_mode,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
-	XXX_unrecognized     []byte          `json:"-"`
-	XXX_sizecache        int32           `json:"-"`
+	TransactionMode TransactionMode `protobuf:"varint,7,opt,name=transaction_mode,json=transactionMode,proto3,enum=vtgate.TransactionMode" json:"transaction_mode,omitempty"`
+	// warnings contains non-fatal warnings from the previous query
+	Warnings             []*query.QueryWarning `protobuf:"bytes,8,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
+	XXX_unrecognized     []byte                `json:"-"`
+	XXX_sizecache        int32                 `json:"-"`
 }
 
 func (m *Session) Reset()         { *m = Session{} }
 func (m *Session) String() string { return proto.CompactTextString(m) }
 func (*Session) ProtoMessage()    {}
 func (*Session) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{0}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{0}
 }
 func (m *Session) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Session.Unmarshal(m, b)
@@ -165,9 +167,16 @@ func (m *Session) GetTransactionMode() TransactionMode {
 	return TransactionMode_UNSPECIFIED
 }
 
+func (m *Session) GetWarnings() []*query.QueryWarning {
+	if m != nil {
+		return m.Warnings
+	}
+	return nil
+}
+
 type Session_ShardSession struct {
-	Target               *query.Target `protobuf:"bytes,1,opt,name=target" json:"target,omitempty"`
-	TransactionId        int64         `protobuf:"varint,2,opt,name=transaction_id,json=transactionId" json:"transaction_id,omitempty"`
+	Target               *query.Target `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	TransactionId        int64         `protobuf:"varint,2,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
 	XXX_unrecognized     []byte        `json:"-"`
 	XXX_sizecache        int32         `json:"-"`
@@ -177,7 +186,7 @@ func (m *Session_ShardSession) Reset()         { *m = Session_ShardSession{} }
 func (m *Session_ShardSession) String() string { return proto.CompactTextString(m) }
 func (*Session_ShardSession) ProtoMessage()    {}
 func (*Session_ShardSession) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{0, 0}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{0, 0}
 }
 func (m *Session_ShardSession) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Session_ShardSession.Unmarshal(m, b)
@@ -215,17 +224,17 @@ func (m *Session_ShardSession) GetTransactionId() int64 {
 type ExecuteRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// session carries the session state.
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// query is the query and bind variables to execute.
-	Query *query.BoundQuery `protobuf:"bytes,3,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
 	// These values are deprecated. Use session instead.
 	// TODO(sougou): remove in 3.1
-	TabletType           topodata.TabletType   `protobuf:"varint,4,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
-	NotInTransaction     bool                  `protobuf:"varint,5,opt,name=not_in_transaction,json=notInTransaction" json:"not_in_transaction,omitempty"`
-	KeyspaceShard        string                `protobuf:"bytes,6,opt,name=keyspace_shard,json=keyspaceShard" json:"keyspace_shard,omitempty"`
-	Options              *query.ExecuteOptions `protobuf:"bytes,7,opt,name=options" json:"options,omitempty"`
+	TabletType           topodata.TabletType   `protobuf:"varint,4,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	NotInTransaction     bool                  `protobuf:"varint,5,opt,name=not_in_transaction,json=notInTransaction,proto3" json:"not_in_transaction,omitempty"`
+	KeyspaceShard        string                `protobuf:"bytes,6,opt,name=keyspace_shard,json=keyspaceShard,proto3" json:"keyspace_shard,omitempty"`
+	Options              *query.ExecuteOptions `protobuf:"bytes,7,opt,name=options,proto3" json:"options,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -235,7 +244,7 @@ func (m *ExecuteRequest) Reset()         { *m = ExecuteRequest{} }
 func (m *ExecuteRequest) String() string { return proto.CompactTextString(m) }
 func (*ExecuteRequest) ProtoMessage()    {}
 func (*ExecuteRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{1}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{1}
 }
 func (m *ExecuteRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteRequest.Unmarshal(m, b)
@@ -309,11 +318,11 @@ type ExecuteResponse struct {
 	// error contains an application level error if necessary. Note the
 	// session may have changed, even when an error is returned (for
 	// instance if a database integrity error happened).
-	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
 	// session is the updated session information.
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// result contains the query result, only set if error is unset.
-	Result               *query.QueryResult `protobuf:"bytes,3,opt,name=result" json:"result,omitempty"`
+	Result               *query.QueryResult `protobuf:"bytes,3,opt,name=result,proto3" json:"result,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
 	XXX_unrecognized     []byte             `json:"-"`
 	XXX_sizecache        int32              `json:"-"`
@@ -323,7 +332,7 @@ func (m *ExecuteResponse) Reset()         { *m = ExecuteResponse{} }
 func (m *ExecuteResponse) String() string { return proto.CompactTextString(m) }
 func (*ExecuteResponse) ProtoMessage()    {}
 func (*ExecuteResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{2}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{2}
 }
 func (m *ExecuteResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteResponse.Unmarshal(m, b)
@@ -368,22 +377,22 @@ func (m *ExecuteResponse) GetResult() *query.QueryResult {
 type ExecuteShardsRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// session carries the current transaction data. It is returned by Begin.
 	// Do not fill it in if outside of a transaction.
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// query is the query and bind variables to execute.
-	Query *query.BoundQuery `protobuf:"bytes,3,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,4,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,4,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// shards to target the query to. A DML can only target one shard.
-	Shards []string `protobuf:"bytes,5,rep,name=shards" json:"shards,omitempty"`
+	Shards []string `protobuf:"bytes,5,rep,name=shards,proto3" json:"shards,omitempty"`
 	// tablet_type is the type of tablets that this query is targeted to.
-	TabletType topodata.TabletType `protobuf:"varint,6,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	TabletType topodata.TabletType `protobuf:"varint,6,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
 	// not_in_transaction is deprecated.
-	NotInTransaction bool `protobuf:"varint,7,opt,name=not_in_transaction,json=notInTransaction" json:"not_in_transaction,omitempty"`
+	NotInTransaction bool `protobuf:"varint,7,opt,name=not_in_transaction,json=notInTransaction,proto3" json:"not_in_transaction,omitempty"`
 	// options
-	Options              *query.ExecuteOptions `protobuf:"bytes,8,opt,name=options" json:"options,omitempty"`
+	Options              *query.ExecuteOptions `protobuf:"bytes,8,opt,name=options,proto3" json:"options,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -393,7 +402,7 @@ func (m *ExecuteShardsRequest) Reset()         { *m = ExecuteShardsRequest{} }
 func (m *ExecuteShardsRequest) String() string { return proto.CompactTextString(m) }
 func (*ExecuteShardsRequest) ProtoMessage()    {}
 func (*ExecuteShardsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{3}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{3}
 }
 func (m *ExecuteShardsRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteShardsRequest.Unmarshal(m, b)
@@ -474,11 +483,11 @@ type ExecuteShardsResponse struct {
 	// error contains an application level error if necessary. Note the
 	// session may have changed, even when an error is returned (for
 	// instance if a database integrity error happened).
-	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
 	// session is the updated session information (only returned inside a transaction).
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// result contains the query result, only set if error is unset.
-	Result               *query.QueryResult `protobuf:"bytes,3,opt,name=result" json:"result,omitempty"`
+	Result               *query.QueryResult `protobuf:"bytes,3,opt,name=result,proto3" json:"result,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
 	XXX_unrecognized     []byte             `json:"-"`
 	XXX_sizecache        int32              `json:"-"`
@@ -488,7 +497,7 @@ func (m *ExecuteShardsResponse) Reset()         { *m = ExecuteShardsResponse{} }
 func (m *ExecuteShardsResponse) String() string { return proto.CompactTextString(m) }
 func (*ExecuteShardsResponse) ProtoMessage()    {}
 func (*ExecuteShardsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{4}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{4}
 }
 func (m *ExecuteShardsResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteShardsResponse.Unmarshal(m, b)
@@ -533,23 +542,23 @@ func (m *ExecuteShardsResponse) GetResult() *query.QueryResult {
 type ExecuteKeyspaceIdsRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// session carries the current transaction data. It is returned by Begin.
 	// Do not fill it in if outside of a transaction.
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// query is the query and bind variables to execute.
-	Query *query.BoundQuery `protobuf:"bytes,3,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,4,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,4,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// keyspace_ids contains the list of keyspace_ids affected by this query.
 	// Will be used to find the shards to send the query to.
 	KeyspaceIds [][]byte `protobuf:"bytes,5,rep,name=keyspace_ids,json=keyspaceIds,proto3" json:"keyspace_ids,omitempty"`
 	// tablet_type is the type of tablets that this query is targeted to.
-	TabletType topodata.TabletType `protobuf:"varint,6,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	TabletType topodata.TabletType `protobuf:"varint,6,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
 	// not_in_transaction is deprecated.
-	NotInTransaction bool `protobuf:"varint,7,opt,name=not_in_transaction,json=notInTransaction" json:"not_in_transaction,omitempty"`
+	NotInTransaction bool `protobuf:"varint,7,opt,name=not_in_transaction,json=notInTransaction,proto3" json:"not_in_transaction,omitempty"`
 	// options
-	Options              *query.ExecuteOptions `protobuf:"bytes,8,opt,name=options" json:"options,omitempty"`
+	Options              *query.ExecuteOptions `protobuf:"bytes,8,opt,name=options,proto3" json:"options,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -559,7 +568,7 @@ func (m *ExecuteKeyspaceIdsRequest) Reset()         { *m = ExecuteKeyspaceIdsReq
 func (m *ExecuteKeyspaceIdsRequest) String() string { return proto.CompactTextString(m) }
 func (*ExecuteKeyspaceIdsRequest) ProtoMessage()    {}
 func (*ExecuteKeyspaceIdsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{5}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{5}
 }
 func (m *ExecuteKeyspaceIdsRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteKeyspaceIdsRequest.Unmarshal(m, b)
@@ -640,11 +649,11 @@ type ExecuteKeyspaceIdsResponse struct {
 	// error contains an application level error if necessary. Note the
 	// session may have changed, even when an error is returned (for
 	// instance if a database integrity error happened).
-	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
 	// session is the updated session information (only returned inside a transaction).
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// result contains the query result, only set if error is unset.
-	Result               *query.QueryResult `protobuf:"bytes,3,opt,name=result" json:"result,omitempty"`
+	Result               *query.QueryResult `protobuf:"bytes,3,opt,name=result,proto3" json:"result,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
 	XXX_unrecognized     []byte             `json:"-"`
 	XXX_sizecache        int32              `json:"-"`
@@ -654,7 +663,7 @@ func (m *ExecuteKeyspaceIdsResponse) Reset()         { *m = ExecuteKeyspaceIdsRe
 func (m *ExecuteKeyspaceIdsResponse) String() string { return proto.CompactTextString(m) }
 func (*ExecuteKeyspaceIdsResponse) ProtoMessage()    {}
 func (*ExecuteKeyspaceIdsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{6}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{6}
 }
 func (m *ExecuteKeyspaceIdsResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteKeyspaceIdsResponse.Unmarshal(m, b)
@@ -699,23 +708,23 @@ func (m *ExecuteKeyspaceIdsResponse) GetResult() *query.QueryResult {
 type ExecuteKeyRangesRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// session carries the current transaction data. It is returned by Begin.
 	// Do not fill it in if outside of a transaction.
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// query is the query and bind variables to execute.
-	Query *query.BoundQuery `protobuf:"bytes,3,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
 	// keyspace to target the query to
-	Keyspace string `protobuf:"bytes,4,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,4,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// key_ranges contains the list of key ranges affected by this query.
 	// Will be used to find the shards to send the query to.
-	KeyRanges []*topodata.KeyRange `protobuf:"bytes,5,rep,name=key_ranges,json=keyRanges" json:"key_ranges,omitempty"`
+	KeyRanges []*topodata.KeyRange `protobuf:"bytes,5,rep,name=key_ranges,json=keyRanges,proto3" json:"key_ranges,omitempty"`
 	// tablet_type is the type of tablets that this query is targeted to.
-	TabletType topodata.TabletType `protobuf:"varint,6,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	TabletType topodata.TabletType `protobuf:"varint,6,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
 	// not_in_transaction is deprecated.
-	NotInTransaction bool `protobuf:"varint,7,opt,name=not_in_transaction,json=notInTransaction" json:"not_in_transaction,omitempty"`
+	NotInTransaction bool `protobuf:"varint,7,opt,name=not_in_transaction,json=notInTransaction,proto3" json:"not_in_transaction,omitempty"`
 	// options
-	Options              *query.ExecuteOptions `protobuf:"bytes,8,opt,name=options" json:"options,omitempty"`
+	Options              *query.ExecuteOptions `protobuf:"bytes,8,opt,name=options,proto3" json:"options,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -725,7 +734,7 @@ func (m *ExecuteKeyRangesRequest) Reset()         { *m = ExecuteKeyRangesRequest
 func (m *ExecuteKeyRangesRequest) String() string { return proto.CompactTextString(m) }
 func (*ExecuteKeyRangesRequest) ProtoMessage()    {}
 func (*ExecuteKeyRangesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{7}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{7}
 }
 func (m *ExecuteKeyRangesRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteKeyRangesRequest.Unmarshal(m, b)
@@ -806,11 +815,11 @@ type ExecuteKeyRangesResponse struct {
 	// error contains an application level error if necessary. Note the
 	// session may have changed, even when an error is returned (for
 	// instance if a database integrity error happened).
-	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
 	// session is the updated session information (only returned inside a transaction).
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// result contains the query result, only set if error is unset.
-	Result               *query.QueryResult `protobuf:"bytes,3,opt,name=result" json:"result,omitempty"`
+	Result               *query.QueryResult `protobuf:"bytes,3,opt,name=result,proto3" json:"result,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
 	XXX_unrecognized     []byte             `json:"-"`
 	XXX_sizecache        int32              `json:"-"`
@@ -820,7 +829,7 @@ func (m *ExecuteKeyRangesResponse) Reset()         { *m = ExecuteKeyRangesRespon
 func (m *ExecuteKeyRangesResponse) String() string { return proto.CompactTextString(m) }
 func (*ExecuteKeyRangesResponse) ProtoMessage()    {}
 func (*ExecuteKeyRangesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{8}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{8}
 }
 func (m *ExecuteKeyRangesResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteKeyRangesResponse.Unmarshal(m, b)
@@ -865,25 +874,25 @@ func (m *ExecuteKeyRangesResponse) GetResult() *query.QueryResult {
 type ExecuteEntityIdsRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// session carries the current transaction data. It is returned by Begin.
 	// Do not fill it in if outside of a transaction.
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// query is the query and bind variables to execute.
-	Query *query.BoundQuery `protobuf:"bytes,3,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,4,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,4,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// entity_column_name is the column name to use.
-	EntityColumnName string `protobuf:"bytes,5,opt,name=entity_column_name,json=entityColumnName" json:"entity_column_name,omitempty"`
+	EntityColumnName string `protobuf:"bytes,5,opt,name=entity_column_name,json=entityColumnName,proto3" json:"entity_column_name,omitempty"`
 	// entity_keyspace_ids are pairs of entity_column_name values
 	// associated with its corresponding keyspace_id.
-	EntityKeyspaceIds []*ExecuteEntityIdsRequest_EntityId `protobuf:"bytes,6,rep,name=entity_keyspace_ids,json=entityKeyspaceIds" json:"entity_keyspace_ids,omitempty"`
+	EntityKeyspaceIds []*ExecuteEntityIdsRequest_EntityId `protobuf:"bytes,6,rep,name=entity_keyspace_ids,json=entityKeyspaceIds,proto3" json:"entity_keyspace_ids,omitempty"`
 	// tablet_type is the type of tablets that this query is targeted to.
-	TabletType topodata.TabletType `protobuf:"varint,7,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	TabletType topodata.TabletType `protobuf:"varint,7,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
 	// not_in_transaction is deprecated.
-	NotInTransaction bool `protobuf:"varint,8,opt,name=not_in_transaction,json=notInTransaction" json:"not_in_transaction,omitempty"`
+	NotInTransaction bool `protobuf:"varint,8,opt,name=not_in_transaction,json=notInTransaction,proto3" json:"not_in_transaction,omitempty"`
 	// options
-	Options              *query.ExecuteOptions `protobuf:"bytes,9,opt,name=options" json:"options,omitempty"`
+	Options              *query.ExecuteOptions `protobuf:"bytes,9,opt,name=options,proto3" json:"options,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -893,7 +902,7 @@ func (m *ExecuteEntityIdsRequest) Reset()         { *m = ExecuteEntityIdsRequest
 func (m *ExecuteEntityIdsRequest) String() string { return proto.CompactTextString(m) }
 func (*ExecuteEntityIdsRequest) ProtoMessage()    {}
 func (*ExecuteEntityIdsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{9}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{9}
 }
 func (m *ExecuteEntityIdsRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteEntityIdsRequest.Unmarshal(m, b)
@@ -978,7 +987,7 @@ func (m *ExecuteEntityIdsRequest) GetOptions() *query.ExecuteOptions {
 
 type ExecuteEntityIdsRequest_EntityId struct {
 	// type is the type of the entity's value. Can be NULL_TYPE.
-	Type query.Type `protobuf:"varint,1,opt,name=type,enum=query.Type" json:"type,omitempty"`
+	Type query.Type `protobuf:"varint,1,opt,name=type,proto3,enum=query.Type" json:"type,omitempty"`
 	// value is the value for the entity. Not set if type is NULL_TYPE.
 	Value []byte `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 	// keyspace_id is the associated keyspace_id for the entity.
@@ -992,7 +1001,7 @@ func (m *ExecuteEntityIdsRequest_EntityId) Reset()         { *m = ExecuteEntityI
 func (m *ExecuteEntityIdsRequest_EntityId) String() string { return proto.CompactTextString(m) }
 func (*ExecuteEntityIdsRequest_EntityId) ProtoMessage()    {}
 func (*ExecuteEntityIdsRequest_EntityId) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{9, 0}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{9, 0}
 }
 func (m *ExecuteEntityIdsRequest_EntityId) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteEntityIdsRequest_EntityId.Unmarshal(m, b)
@@ -1038,11 +1047,11 @@ type ExecuteEntityIdsResponse struct {
 	// error contains an application level error if necessary. Note the
 	// session may have changed, even when an error is returned (for
 	// instance if a database integrity error happened).
-	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
 	// session is the updated session information (only returned inside a transaction).
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// result contains the query result, only set if error is unset.
-	Result               *query.QueryResult `protobuf:"bytes,3,opt,name=result" json:"result,omitempty"`
+	Result               *query.QueryResult `protobuf:"bytes,3,opt,name=result,proto3" json:"result,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
 	XXX_unrecognized     []byte             `json:"-"`
 	XXX_sizecache        int32              `json:"-"`
@@ -1052,7 +1061,7 @@ func (m *ExecuteEntityIdsResponse) Reset()         { *m = ExecuteEntityIdsRespon
 func (m *ExecuteEntityIdsResponse) String() string { return proto.CompactTextString(m) }
 func (*ExecuteEntityIdsResponse) ProtoMessage()    {}
 func (*ExecuteEntityIdsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{10}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{10}
 }
 func (m *ExecuteEntityIdsResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteEntityIdsResponse.Unmarshal(m, b)
@@ -1097,17 +1106,17 @@ func (m *ExecuteEntityIdsResponse) GetResult() *query.QueryResult {
 type ExecuteBatchRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// session carries the session state.
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// queries is a list of query and bind variables to execute.
-	Queries []*query.BoundQuery `protobuf:"bytes,3,rep,name=queries" json:"queries,omitempty"`
+	Queries []*query.BoundQuery `protobuf:"bytes,3,rep,name=queries,proto3" json:"queries,omitempty"`
 	// These values are deprecated. Use session instead.
 	// TODO(sougou): remove in 3.1
-	TabletType           topodata.TabletType   `protobuf:"varint,4,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
-	AsTransaction        bool                  `protobuf:"varint,5,opt,name=as_transaction,json=asTransaction" json:"as_transaction,omitempty"`
-	KeyspaceShard        string                `protobuf:"bytes,6,opt,name=keyspace_shard,json=keyspaceShard" json:"keyspace_shard,omitempty"`
-	Options              *query.ExecuteOptions `protobuf:"bytes,7,opt,name=options" json:"options,omitempty"`
+	TabletType           topodata.TabletType   `protobuf:"varint,4,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	AsTransaction        bool                  `protobuf:"varint,5,opt,name=as_transaction,json=asTransaction,proto3" json:"as_transaction,omitempty"`
+	KeyspaceShard        string                `protobuf:"bytes,6,opt,name=keyspace_shard,json=keyspaceShard,proto3" json:"keyspace_shard,omitempty"`
+	Options              *query.ExecuteOptions `protobuf:"bytes,7,opt,name=options,proto3" json:"options,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -1117,7 +1126,7 @@ func (m *ExecuteBatchRequest) Reset()         { *m = ExecuteBatchRequest{} }
 func (m *ExecuteBatchRequest) String() string { return proto.CompactTextString(m) }
 func (*ExecuteBatchRequest) ProtoMessage()    {}
 func (*ExecuteBatchRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{11}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{11}
 }
 func (m *ExecuteBatchRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteBatchRequest.Unmarshal(m, b)
@@ -1191,11 +1200,11 @@ type ExecuteBatchResponse struct {
 	// error contains an application level error if necessary. Note the
 	// session may have changed, even when an error is returned (for
 	// instance if a database integrity error happened).
-	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
 	// session is the updated session information.
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// results contains the query results, only set if application level error is unset.
-	Results              []*query.ResultWithError `protobuf:"bytes,3,rep,name=results" json:"results,omitempty"`
+	Results              []*query.ResultWithError `protobuf:"bytes,3,rep,name=results,proto3" json:"results,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
 	XXX_unrecognized     []byte                   `json:"-"`
 	XXX_sizecache        int32                    `json:"-"`
@@ -1205,7 +1214,7 @@ func (m *ExecuteBatchResponse) Reset()         { *m = ExecuteBatchResponse{} }
 func (m *ExecuteBatchResponse) String() string { return proto.CompactTextString(m) }
 func (*ExecuteBatchResponse) ProtoMessage()    {}
 func (*ExecuteBatchResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{12}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{12}
 }
 func (m *ExecuteBatchResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteBatchResponse.Unmarshal(m, b)
@@ -1251,11 +1260,11 @@ func (m *ExecuteBatchResponse) GetResults() []*query.ResultWithError {
 // ExecuteBatchShardsRequest.
 type BoundShardQuery struct {
 	// query is the query and bind variables to execute.
-	Query *query.BoundQuery `protobuf:"bytes,1,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,2,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,2,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// shards to target the query to. A DML can only target one shard.
-	Shards               []string `protobuf:"bytes,3,rep,name=shards" json:"shards,omitempty"`
+	Shards               []string `protobuf:"bytes,3,rep,name=shards,proto3" json:"shards,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -1265,7 +1274,7 @@ func (m *BoundShardQuery) Reset()         { *m = BoundShardQuery{} }
 func (m *BoundShardQuery) String() string { return proto.CompactTextString(m) }
 func (*BoundShardQuery) ProtoMessage()    {}
 func (*BoundShardQuery) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{13}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{13}
 }
 func (m *BoundShardQuery) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_BoundShardQuery.Unmarshal(m, b)
@@ -1310,20 +1319,20 @@ func (m *BoundShardQuery) GetShards() []string {
 type ExecuteBatchShardsRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// session carries the current transaction data. It is returned by Begin.
 	// Do not fill it in if outside of a transaction.
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// queries carries all the queries to execute.
-	Queries []*BoundShardQuery `protobuf:"bytes,3,rep,name=queries" json:"queries,omitempty"`
+	Queries []*BoundShardQuery `protobuf:"bytes,3,rep,name=queries,proto3" json:"queries,omitempty"`
 	// tablet_type is the type of tablets that this query is targeted to.
-	TabletType topodata.TabletType `protobuf:"varint,4,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	TabletType topodata.TabletType `protobuf:"varint,4,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
 	// as_transaction will execute the queries in this batch in a single transaction per shard, created for this purpose.
 	// (this can be seen as adding a 'begin' before and 'commit' after the queries).
 	// Only makes sense if tablet_type is master. If set, the Session is ignored.
-	AsTransaction bool `protobuf:"varint,5,opt,name=as_transaction,json=asTransaction" json:"as_transaction,omitempty"`
+	AsTransaction bool `protobuf:"varint,5,opt,name=as_transaction,json=asTransaction,proto3" json:"as_transaction,omitempty"`
 	// options
-	Options              *query.ExecuteOptions `protobuf:"bytes,6,opt,name=options" json:"options,omitempty"`
+	Options              *query.ExecuteOptions `protobuf:"bytes,6,opt,name=options,proto3" json:"options,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -1333,7 +1342,7 @@ func (m *ExecuteBatchShardsRequest) Reset()         { *m = ExecuteBatchShardsReq
 func (m *ExecuteBatchShardsRequest) String() string { return proto.CompactTextString(m) }
 func (*ExecuteBatchShardsRequest) ProtoMessage()    {}
 func (*ExecuteBatchShardsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{14}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{14}
 }
 func (m *ExecuteBatchShardsRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteBatchShardsRequest.Unmarshal(m, b)
@@ -1400,11 +1409,11 @@ type ExecuteBatchShardsResponse struct {
 	// error contains an application level error if necessary. Note the
 	// session may have changed, even when an error is returned (for
 	// instance if a database integrity error happened).
-	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
 	// session is the updated session information (only returned inside a transaction).
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// result contains the query result, only set if error is unset.
-	Results              []*query.QueryResult `protobuf:"bytes,3,rep,name=results" json:"results,omitempty"`
+	Results              []*query.QueryResult `protobuf:"bytes,3,rep,name=results,proto3" json:"results,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
 	XXX_unrecognized     []byte               `json:"-"`
 	XXX_sizecache        int32                `json:"-"`
@@ -1414,7 +1423,7 @@ func (m *ExecuteBatchShardsResponse) Reset()         { *m = ExecuteBatchShardsRe
 func (m *ExecuteBatchShardsResponse) String() string { return proto.CompactTextString(m) }
 func (*ExecuteBatchShardsResponse) ProtoMessage()    {}
 func (*ExecuteBatchShardsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{15}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{15}
 }
 func (m *ExecuteBatchShardsResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteBatchShardsResponse.Unmarshal(m, b)
@@ -1460,9 +1469,9 @@ func (m *ExecuteBatchShardsResponse) GetResults() []*query.QueryResult {
 // ExecuteBatchKeyspaceIdsRequest.
 type BoundKeyspaceIdQuery struct {
 	// query is the query and bind variables to execute.
-	Query *query.BoundQuery `protobuf:"bytes,1,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,2,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,2,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// keyspace_ids contains the list of keyspace_ids affected by this query.
 	// Will be used to find the shards to send the query to.
 	KeyspaceIds          [][]byte `protobuf:"bytes,3,rep,name=keyspace_ids,json=keyspaceIds,proto3" json:"keyspace_ids,omitempty"`
@@ -1475,7 +1484,7 @@ func (m *BoundKeyspaceIdQuery) Reset()         { *m = BoundKeyspaceIdQuery{} }
 func (m *BoundKeyspaceIdQuery) String() string { return proto.CompactTextString(m) }
 func (*BoundKeyspaceIdQuery) ProtoMessage()    {}
 func (*BoundKeyspaceIdQuery) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{16}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{16}
 }
 func (m *BoundKeyspaceIdQuery) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_BoundKeyspaceIdQuery.Unmarshal(m, b)
@@ -1520,19 +1529,19 @@ func (m *BoundKeyspaceIdQuery) GetKeyspaceIds() [][]byte {
 type ExecuteBatchKeyspaceIdsRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// session carries the current transaction data. It is returned by Begin.
 	// Do not fill it in if outside of a transaction.
-	Session *Session                `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
-	Queries []*BoundKeyspaceIdQuery `protobuf:"bytes,3,rep,name=queries" json:"queries,omitempty"`
+	Session *Session                `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
+	Queries []*BoundKeyspaceIdQuery `protobuf:"bytes,3,rep,name=queries,proto3" json:"queries,omitempty"`
 	// tablet_type is the type of tablets that this query is targeted to.
-	TabletType topodata.TabletType `protobuf:"varint,4,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	TabletType topodata.TabletType `protobuf:"varint,4,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
 	// as_transaction will execute the queries in this batch in a single transaction per shard, created for this purpose.
 	// (this can be seen as adding a 'begin' before and 'commit' after the queries).
 	// Only makes sense if tablet_type is master. If set, the Session is ignored.
-	AsTransaction bool `protobuf:"varint,5,opt,name=as_transaction,json=asTransaction" json:"as_transaction,omitempty"`
+	AsTransaction bool `protobuf:"varint,5,opt,name=as_transaction,json=asTransaction,proto3" json:"as_transaction,omitempty"`
 	// options
-	Options              *query.ExecuteOptions `protobuf:"bytes,6,opt,name=options" json:"options,omitempty"`
+	Options              *query.ExecuteOptions `protobuf:"bytes,6,opt,name=options,proto3" json:"options,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -1542,7 +1551,7 @@ func (m *ExecuteBatchKeyspaceIdsRequest) Reset()         { *m = ExecuteBatchKeys
 func (m *ExecuteBatchKeyspaceIdsRequest) String() string { return proto.CompactTextString(m) }
 func (*ExecuteBatchKeyspaceIdsRequest) ProtoMessage()    {}
 func (*ExecuteBatchKeyspaceIdsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{17}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{17}
 }
 func (m *ExecuteBatchKeyspaceIdsRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteBatchKeyspaceIdsRequest.Unmarshal(m, b)
@@ -1609,11 +1618,11 @@ type ExecuteBatchKeyspaceIdsResponse struct {
 	// error contains an application level error if necessary. Note the
 	// session may have changed, even when an error is returned (for
 	// instance if a database integrity error happened).
-	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	Error *vtrpc.RPCError `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
 	// session is the updated session information (only returned inside a transaction).
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// result contains the query result, only set if error is unset.
-	Results              []*query.QueryResult `protobuf:"bytes,3,rep,name=results" json:"results,omitempty"`
+	Results              []*query.QueryResult `protobuf:"bytes,3,rep,name=results,proto3" json:"results,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
 	XXX_unrecognized     []byte               `json:"-"`
 	XXX_sizecache        int32                `json:"-"`
@@ -1623,7 +1632,7 @@ func (m *ExecuteBatchKeyspaceIdsResponse) Reset()         { *m = ExecuteBatchKey
 func (m *ExecuteBatchKeyspaceIdsResponse) String() string { return proto.CompactTextString(m) }
 func (*ExecuteBatchKeyspaceIdsResponse) ProtoMessage()    {}
 func (*ExecuteBatchKeyspaceIdsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{18}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{18}
 }
 func (m *ExecuteBatchKeyspaceIdsResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ExecuteBatchKeyspaceIdsResponse.Unmarshal(m, b)
@@ -1668,16 +1677,16 @@ func (m *ExecuteBatchKeyspaceIdsResponse) GetResults() []*query.QueryResult {
 type StreamExecuteRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// query is the query and bind variables to execute.
-	Query *query.BoundQuery `protobuf:"bytes,2,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
 	// These values are deprecated. Use session instead.
 	// TODO(sougou): remove in 3.1
-	TabletType    topodata.TabletType   `protobuf:"varint,3,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
-	KeyspaceShard string                `protobuf:"bytes,4,opt,name=keyspace_shard,json=keyspaceShard" json:"keyspace_shard,omitempty"`
-	Options       *query.ExecuteOptions `protobuf:"bytes,5,opt,name=options" json:"options,omitempty"`
+	TabletType    topodata.TabletType   `protobuf:"varint,3,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	KeyspaceShard string                `protobuf:"bytes,4,opt,name=keyspace_shard,json=keyspaceShard,proto3" json:"keyspace_shard,omitempty"`
+	Options       *query.ExecuteOptions `protobuf:"bytes,5,opt,name=options,proto3" json:"options,omitempty"`
 	// session carries the session state.
-	Session              *Session `protobuf:"bytes,6,opt,name=session" json:"session,omitempty"`
+	Session              *Session `protobuf:"bytes,6,opt,name=session,proto3" json:"session,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -1687,7 +1696,7 @@ func (m *StreamExecuteRequest) Reset()         { *m = StreamExecuteRequest{} }
 func (m *StreamExecuteRequest) String() string { return proto.CompactTextString(m) }
 func (*StreamExecuteRequest) ProtoMessage()    {}
 func (*StreamExecuteRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{19}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{19}
 }
 func (m *StreamExecuteRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StreamExecuteRequest.Unmarshal(m, b)
@@ -1756,7 +1765,7 @@ type StreamExecuteResponse struct {
 	// result contains the result data.
 	// The first value contains only Fields information.
 	// The next values contain the actual rows, a few values per result.
-	Result               *query.QueryResult `protobuf:"bytes,1,opt,name=result" json:"result,omitempty"`
+	Result               *query.QueryResult `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
 	XXX_unrecognized     []byte             `json:"-"`
 	XXX_sizecache        int32              `json:"-"`
@@ -1766,7 +1775,7 @@ func (m *StreamExecuteResponse) Reset()         { *m = StreamExecuteResponse{} }
 func (m *StreamExecuteResponse) String() string { return proto.CompactTextString(m) }
 func (*StreamExecuteResponse) ProtoMessage()    {}
 func (*StreamExecuteResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{20}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{20}
 }
 func (m *StreamExecuteResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StreamExecuteResponse.Unmarshal(m, b)
@@ -1797,17 +1806,17 @@ func (m *StreamExecuteResponse) GetResult() *query.QueryResult {
 type StreamExecuteShardsRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// query is the query and bind variables to execute.
-	Query *query.BoundQuery `protobuf:"bytes,2,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,3,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,3,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// shards to target the query to.
-	Shards []string `protobuf:"bytes,4,rep,name=shards" json:"shards,omitempty"`
+	Shards []string `protobuf:"bytes,4,rep,name=shards,proto3" json:"shards,omitempty"`
 	// tablet_type is the type of tablets that this query is targeted to.
-	TabletType topodata.TabletType `protobuf:"varint,5,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	TabletType topodata.TabletType `protobuf:"varint,5,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
 	// options
-	Options              *query.ExecuteOptions `protobuf:"bytes,6,opt,name=options" json:"options,omitempty"`
+	Options              *query.ExecuteOptions `protobuf:"bytes,6,opt,name=options,proto3" json:"options,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -1817,7 +1826,7 @@ func (m *StreamExecuteShardsRequest) Reset()         { *m = StreamExecuteShardsR
 func (m *StreamExecuteShardsRequest) String() string { return proto.CompactTextString(m) }
 func (*StreamExecuteShardsRequest) ProtoMessage()    {}
 func (*StreamExecuteShardsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{21}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{21}
 }
 func (m *StreamExecuteShardsRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StreamExecuteShardsRequest.Unmarshal(m, b)
@@ -1884,7 +1893,7 @@ type StreamExecuteShardsResponse struct {
 	// result contains the result data.
 	// The first value contains only Fields information.
 	// The next values contain the actual rows, a few values per result.
-	Result               *query.QueryResult `protobuf:"bytes,1,opt,name=result" json:"result,omitempty"`
+	Result               *query.QueryResult `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
 	XXX_unrecognized     []byte             `json:"-"`
 	XXX_sizecache        int32              `json:"-"`
@@ -1894,7 +1903,7 @@ func (m *StreamExecuteShardsResponse) Reset()         { *m = StreamExecuteShards
 func (m *StreamExecuteShardsResponse) String() string { return proto.CompactTextString(m) }
 func (*StreamExecuteShardsResponse) ProtoMessage()    {}
 func (*StreamExecuteShardsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{22}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{22}
 }
 func (m *StreamExecuteShardsResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StreamExecuteShardsResponse.Unmarshal(m, b)
@@ -1925,18 +1934,18 @@ func (m *StreamExecuteShardsResponse) GetResult() *query.QueryResult {
 type StreamExecuteKeyspaceIdsRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// query is the query and bind variables to execute.
-	Query *query.BoundQuery `protobuf:"bytes,2,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,3,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,3,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// keyspace_ids contains the list of keyspace_ids affected by this query.
 	// Will be used to find the shards to send the query to.
 	KeyspaceIds [][]byte `protobuf:"bytes,4,rep,name=keyspace_ids,json=keyspaceIds,proto3" json:"keyspace_ids,omitempty"`
 	// tablet_type is the type of tablets that this query is targeted to.
-	TabletType topodata.TabletType `protobuf:"varint,5,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	TabletType topodata.TabletType `protobuf:"varint,5,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
 	// options
-	Options              *query.ExecuteOptions `protobuf:"bytes,6,opt,name=options" json:"options,omitempty"`
+	Options              *query.ExecuteOptions `protobuf:"bytes,6,opt,name=options,proto3" json:"options,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -1946,7 +1955,7 @@ func (m *StreamExecuteKeyspaceIdsRequest) Reset()         { *m = StreamExecuteKe
 func (m *StreamExecuteKeyspaceIdsRequest) String() string { return proto.CompactTextString(m) }
 func (*StreamExecuteKeyspaceIdsRequest) ProtoMessage()    {}
 func (*StreamExecuteKeyspaceIdsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{23}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{23}
 }
 func (m *StreamExecuteKeyspaceIdsRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StreamExecuteKeyspaceIdsRequest.Unmarshal(m, b)
@@ -2013,7 +2022,7 @@ type StreamExecuteKeyspaceIdsResponse struct {
 	// result contains the result data.
 	// The first value contains only Fields information.
 	// The next values contain the actual rows, a few values per result.
-	Result               *query.QueryResult `protobuf:"bytes,1,opt,name=result" json:"result,omitempty"`
+	Result               *query.QueryResult `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
 	XXX_unrecognized     []byte             `json:"-"`
 	XXX_sizecache        int32              `json:"-"`
@@ -2023,7 +2032,7 @@ func (m *StreamExecuteKeyspaceIdsResponse) Reset()         { *m = StreamExecuteK
 func (m *StreamExecuteKeyspaceIdsResponse) String() string { return proto.CompactTextString(m) }
 func (*StreamExecuteKeyspaceIdsResponse) ProtoMessage()    {}
 func (*StreamExecuteKeyspaceIdsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{24}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{24}
 }
 func (m *StreamExecuteKeyspaceIdsResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StreamExecuteKeyspaceIdsResponse.Unmarshal(m, b)
@@ -2054,18 +2063,18 @@ func (m *StreamExecuteKeyspaceIdsResponse) GetResult() *query.QueryResult {
 type StreamExecuteKeyRangesRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// query is the query and bind variables to execute.
-	Query *query.BoundQuery `protobuf:"bytes,2,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,3,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,3,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// key_ranges contains the list of key ranges affected by this query.
 	// Will be used to find the shards to send the query to.
-	KeyRanges []*topodata.KeyRange `protobuf:"bytes,4,rep,name=key_ranges,json=keyRanges" json:"key_ranges,omitempty"`
+	KeyRanges []*topodata.KeyRange `protobuf:"bytes,4,rep,name=key_ranges,json=keyRanges,proto3" json:"key_ranges,omitempty"`
 	// tablet_type is the type of tablets that this query is targeted to.
-	TabletType topodata.TabletType `protobuf:"varint,5,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	TabletType topodata.TabletType `protobuf:"varint,5,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
 	// options
-	Options              *query.ExecuteOptions `protobuf:"bytes,6,opt,name=options" json:"options,omitempty"`
+	Options              *query.ExecuteOptions `protobuf:"bytes,6,opt,name=options,proto3" json:"options,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -2075,7 +2084,7 @@ func (m *StreamExecuteKeyRangesRequest) Reset()         { *m = StreamExecuteKeyR
 func (m *StreamExecuteKeyRangesRequest) String() string { return proto.CompactTextString(m) }
 func (*StreamExecuteKeyRangesRequest) ProtoMessage()    {}
 func (*StreamExecuteKeyRangesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{25}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{25}
 }
 func (m *StreamExecuteKeyRangesRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StreamExecuteKeyRangesRequest.Unmarshal(m, b)
@@ -2142,7 +2151,7 @@ type StreamExecuteKeyRangesResponse struct {
 	// result contains the result data.
 	// The first value contains only Fields information.
 	// The next values contain the actual rows, a few values per result.
-	Result               *query.QueryResult `protobuf:"bytes,1,opt,name=result" json:"result,omitempty"`
+	Result               *query.QueryResult `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
 	XXX_unrecognized     []byte             `json:"-"`
 	XXX_sizecache        int32              `json:"-"`
@@ -2152,7 +2161,7 @@ func (m *StreamExecuteKeyRangesResponse) Reset()         { *m = StreamExecuteKey
 func (m *StreamExecuteKeyRangesResponse) String() string { return proto.CompactTextString(m) }
 func (*StreamExecuteKeyRangesResponse) ProtoMessage()    {}
 func (*StreamExecuteKeyRangesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{26}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{26}
 }
 func (m *StreamExecuteKeyRangesResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StreamExecuteKeyRangesResponse.Unmarshal(m, b)
@@ -2183,12 +2192,12 @@ func (m *StreamExecuteKeyRangesResponse) GetResult() *query.QueryResult {
 type BeginRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// single_db is deprecated. Use transaction_mode instead.
 	// The value specifies if the transaction should be restricted
 	// to a single database.
 	// TODO(sougou): remove in 3.1
-	SingleDb             bool     `protobuf:"varint,2,opt,name=single_db,json=singleDb" json:"single_db,omitempty"`
+	SingleDb             bool     `protobuf:"varint,2,opt,name=single_db,json=singleDb,proto3" json:"single_db,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -2198,7 +2207,7 @@ func (m *BeginRequest) Reset()         { *m = BeginRequest{} }
 func (m *BeginRequest) String() string { return proto.CompactTextString(m) }
 func (*BeginRequest) ProtoMessage()    {}
 func (*BeginRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{27}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{27}
 }
 func (m *BeginRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_BeginRequest.Unmarshal(m, b)
@@ -2235,7 +2244,7 @@ func (m *BeginRequest) GetSingleDb() bool {
 // BeginResponse is the returned value from Begin.
 type BeginResponse struct {
 	// session is the initial session information to use for subsequent queries.
-	Session              *Session `protobuf:"bytes,1,opt,name=session" json:"session,omitempty"`
+	Session              *Session `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -2245,7 +2254,7 @@ func (m *BeginResponse) Reset()         { *m = BeginResponse{} }
 func (m *BeginResponse) String() string { return proto.CompactTextString(m) }
 func (*BeginResponse) ProtoMessage()    {}
 func (*BeginResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{28}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{28}
 }
 func (m *BeginResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_BeginResponse.Unmarshal(m, b)
@@ -2276,14 +2285,14 @@ func (m *BeginResponse) GetSession() *Session {
 type CommitRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// session carries the current transaction data to commit.
-	Session *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	// atomic is deprecated. Use transaction_mode instead.
 	// The value specifies if the commit should go through the
 	// 2PC workflow to ensure atomicity.
 	// TODO(sougou): remove in 3.1
-	Atomic               bool     `protobuf:"varint,3,opt,name=atomic" json:"atomic,omitempty"`
+	Atomic               bool     `protobuf:"varint,3,opt,name=atomic,proto3" json:"atomic,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -2293,7 +2302,7 @@ func (m *CommitRequest) Reset()         { *m = CommitRequest{} }
 func (m *CommitRequest) String() string { return proto.CompactTextString(m) }
 func (*CommitRequest) ProtoMessage()    {}
 func (*CommitRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{29}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{29}
 }
 func (m *CommitRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_CommitRequest.Unmarshal(m, b)
@@ -2345,7 +2354,7 @@ func (m *CommitResponse) Reset()         { *m = CommitResponse{} }
 func (m *CommitResponse) String() string { return proto.CompactTextString(m) }
 func (*CommitResponse) ProtoMessage()    {}
 func (*CommitResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{30}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{30}
 }
 func (m *CommitResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_CommitResponse.Unmarshal(m, b)
@@ -2369,9 +2378,9 @@ var xxx_messageInfo_CommitResponse proto.InternalMessageInfo
 type RollbackRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// session carries the current transaction data to rollback.
-	Session              *Session `protobuf:"bytes,2,opt,name=session" json:"session,omitempty"`
+	Session              *Session `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -2381,7 +2390,7 @@ func (m *RollbackRequest) Reset()         { *m = RollbackRequest{} }
 func (m *RollbackRequest) String() string { return proto.CompactTextString(m) }
 func (*RollbackRequest) ProtoMessage()    {}
 func (*RollbackRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{31}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{31}
 }
 func (m *RollbackRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_RollbackRequest.Unmarshal(m, b)
@@ -2426,7 +2435,7 @@ func (m *RollbackResponse) Reset()         { *m = RollbackResponse{} }
 func (m *RollbackResponse) String() string { return proto.CompactTextString(m) }
 func (*RollbackResponse) ProtoMessage()    {}
 func (*RollbackResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{32}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{32}
 }
 func (m *RollbackResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_RollbackResponse.Unmarshal(m, b)
@@ -2450,9 +2459,9 @@ var xxx_messageInfo_RollbackResponse proto.InternalMessageInfo
 type ResolveTransactionRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// dtid is the dtid of the transaction to be resolved.
-	Dtid                 string   `protobuf:"bytes,2,opt,name=dtid" json:"dtid,omitempty"`
+	Dtid                 string   `protobuf:"bytes,2,opt,name=dtid,proto3" json:"dtid,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -2462,7 +2471,7 @@ func (m *ResolveTransactionRequest) Reset()         { *m = ResolveTransactionReq
 func (m *ResolveTransactionRequest) String() string { return proto.CompactTextString(m) }
 func (*ResolveTransactionRequest) ProtoMessage()    {}
 func (*ResolveTransactionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{33}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{33}
 }
 func (m *ResolveTransactionRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ResolveTransactionRequest.Unmarshal(m, b)
@@ -2500,15 +2509,15 @@ func (m *ResolveTransactionRequest) GetDtid() string {
 type MessageStreamRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,2,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,2,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// shard to target the query to, for unsharded keyspaces.
-	Shard string `protobuf:"bytes,3,opt,name=shard" json:"shard,omitempty"`
+	Shard string `protobuf:"bytes,3,opt,name=shard,proto3" json:"shard,omitempty"`
 	// KeyRange to target the query to, for sharded keyspaces.
-	KeyRange *topodata.KeyRange `protobuf:"bytes,4,opt,name=key_range,json=keyRange" json:"key_range,omitempty"`
+	KeyRange *topodata.KeyRange `protobuf:"bytes,4,opt,name=key_range,json=keyRange,proto3" json:"key_range,omitempty"`
 	// name is the message table name.
-	Name                 string   `protobuf:"bytes,5,opt,name=name" json:"name,omitempty"`
+	Name                 string   `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -2518,7 +2527,7 @@ func (m *MessageStreamRequest) Reset()         { *m = MessageStreamRequest{} }
 func (m *MessageStreamRequest) String() string { return proto.CompactTextString(m) }
 func (*MessageStreamRequest) ProtoMessage()    {}
 func (*MessageStreamRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{34}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{34}
 }
 func (m *MessageStreamRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_MessageStreamRequest.Unmarshal(m, b)
@@ -2577,13 +2586,13 @@ func (m *MessageStreamRequest) GetName() string {
 type MessageAckRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// keyspace to target the message to.
-	Keyspace string `protobuf:"bytes,2,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,2,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// name is the message table name.
-	Name string `protobuf:"bytes,3,opt,name=name" json:"name,omitempty"`
+	Name string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	// ids is the list of ids to ack.
-	Ids                  []*query.Value `protobuf:"bytes,4,rep,name=ids" json:"ids,omitempty"`
+	Ids                  []*query.Value `protobuf:"bytes,4,rep,name=ids,proto3" json:"ids,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
 	XXX_unrecognized     []byte         `json:"-"`
 	XXX_sizecache        int32          `json:"-"`
@@ -2593,7 +2602,7 @@ func (m *MessageAckRequest) Reset()         { *m = MessageAckRequest{} }
 func (m *MessageAckRequest) String() string { return proto.CompactTextString(m) }
 func (*MessageAckRequest) ProtoMessage()    {}
 func (*MessageAckRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{35}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{35}
 }
 func (m *MessageAckRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_MessageAckRequest.Unmarshal(m, b)
@@ -2645,7 +2654,7 @@ func (m *MessageAckRequest) GetIds() []*query.Value {
 // The kesypace_id represents the routing info for id.
 type IdKeyspaceId struct {
 	// id represents the message id.
-	Id *query.Value `protobuf:"bytes,1,opt,name=id" json:"id,omitempty"`
+	Id *query.Value `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// keyspace_id is the associated keyspace_id for the id.
 	KeyspaceId           []byte   `protobuf:"bytes,2,opt,name=keyspace_id,json=keyspaceId,proto3" json:"keyspace_id,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
@@ -2657,7 +2666,7 @@ func (m *IdKeyspaceId) Reset()         { *m = IdKeyspaceId{} }
 func (m *IdKeyspaceId) String() string { return proto.CompactTextString(m) }
 func (*IdKeyspaceId) ProtoMessage()    {}
 func (*IdKeyspaceId) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{36}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{36}
 }
 func (m *IdKeyspaceId) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_IdKeyspaceId.Unmarshal(m, b)
@@ -2695,12 +2704,12 @@ func (m *IdKeyspaceId) GetKeyspaceId() []byte {
 type MessageAckKeyspaceIdsRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// Optional keyspace for message table.
-	Keyspace string `protobuf:"bytes,2,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,2,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// name is the message table name.
-	Name                 string          `protobuf:"bytes,3,opt,name=name" json:"name,omitempty"`
-	IdKeyspaceIds        []*IdKeyspaceId `protobuf:"bytes,4,rep,name=id_keyspace_ids,json=idKeyspaceIds" json:"id_keyspace_ids,omitempty"`
+	Name                 string          `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	IdKeyspaceIds        []*IdKeyspaceId `protobuf:"bytes,4,rep,name=id_keyspace_ids,json=idKeyspaceIds,proto3" json:"id_keyspace_ids,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
 	XXX_unrecognized     []byte          `json:"-"`
 	XXX_sizecache        int32           `json:"-"`
@@ -2710,7 +2719,7 @@ func (m *MessageAckKeyspaceIdsRequest) Reset()         { *m = MessageAckKeyspace
 func (m *MessageAckKeyspaceIdsRequest) String() string { return proto.CompactTextString(m) }
 func (*MessageAckKeyspaceIdsRequest) ProtoMessage()    {}
 func (*MessageAckKeyspaceIdsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{37}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{37}
 }
 func (m *MessageAckKeyspaceIdsRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_MessageAckKeyspaceIdsRequest.Unmarshal(m, b)
@@ -2769,7 +2778,7 @@ func (m *ResolveTransactionResponse) Reset()         { *m = ResolveTransactionRe
 func (m *ResolveTransactionResponse) String() string { return proto.CompactTextString(m) }
 func (*ResolveTransactionResponse) ProtoMessage()    {}
 func (*ResolveTransactionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{38}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{38}
 }
 func (m *ResolveTransactionResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ResolveTransactionResponse.Unmarshal(m, b)
@@ -2794,7 +2803,7 @@ var xxx_messageInfo_ResolveTransactionResponse proto.InternalMessageInfo
 // SplitQuery takes a "SELECT" query and generates a list of queries called
 // "query-parts". Each query-part consists of the original query with an
 // added WHERE clause that restricts the query-part to operate only on
-// rows whose values in the the columns listed in the "split_column" field
+// rows whose values in the columns listed in the "split_column" field
 // of the request (see below) are in a particular range.
 //
 // It is guaranteed that the set of rows obtained from
@@ -2809,9 +2818,9 @@ var xxx_messageInfo_ResolveTransactionResponse proto.InternalMessageInfo
 type SplitQueryRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,2,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,2,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// The query and bind variables to produce splits for.
 	// The given query must be a simple query of the form
 	// SELECT <cols> FROM <table> WHERE <filter>.
@@ -2819,7 +2828,7 @@ type SplitQueryRequest struct {
 	// JOIN, GROUP BY, ORDER BY, LIMIT, DISTINCT.
 	// Furthermore, <table> must be a single “concrete” table.
 	// It cannot be a view.
-	Query *query.BoundQuery `protobuf:"bytes,3,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
 	// Each generated query-part will be restricted to rows whose values
 	// in the columns listed in this field are in a particular range.
 	// The list of columns named here must be a prefix of the list of
@@ -2828,7 +2837,7 @@ type SplitQueryRequest struct {
 	// (in order) is sufficient and this is the default if this field is omitted.
 	// See the comment on the 'algorithm' field for more restrictions and
 	// information.
-	SplitColumn []string `protobuf:"bytes,4,rep,name=split_column,json=splitColumn" json:"split_column,omitempty"`
+	SplitColumn []string `protobuf:"bytes,4,rep,name=split_column,json=splitColumn,proto3" json:"split_column,omitempty"`
 	// You can specify either an estimate of the number of query-parts to
 	// generate or an estimate of the number of rows each query-part should
 	// return.
@@ -2841,8 +2850,8 @@ type SplitQueryRequest struct {
 	// Note that if "split_count" is given it is regarded as an estimate.
 	// The number of query-parts returned may differ slightly (in particular,
 	// if it's not a whole multiple of the number of vitess shards).
-	SplitCount          int64 `protobuf:"varint,5,opt,name=split_count,json=splitCount" json:"split_count,omitempty"`
-	NumRowsPerQueryPart int64 `protobuf:"varint,6,opt,name=num_rows_per_query_part,json=numRowsPerQueryPart" json:"num_rows_per_query_part,omitempty"`
+	SplitCount          int64 `protobuf:"varint,5,opt,name=split_count,json=splitCount,proto3" json:"split_count,omitempty"`
+	NumRowsPerQueryPart int64 `protobuf:"varint,6,opt,name=num_rows_per_query_part,json=numRowsPerQueryPart,proto3" json:"num_rows_per_query_part,omitempty"`
 	// The algorithm to use to split the query. The split algorithm is performed
 	// on each database shard in parallel. The lists of query-parts generated
 	// by the shards are merged and returned to the caller.
@@ -2872,12 +2881,12 @@ type SplitQueryRequest struct {
 	//    located between two successive boundary rows.
 	//    This algorithm supports multiple split_column's of any type,
 	//    but is slower than EQUAL_SPLITS.
-	Algorithm query.SplitQueryRequest_Algorithm `protobuf:"varint,7,opt,name=algorithm,enum=query.SplitQueryRequest_Algorithm" json:"algorithm,omitempty"`
+	Algorithm query.SplitQueryRequest_Algorithm `protobuf:"varint,7,opt,name=algorithm,proto3,enum=query.SplitQueryRequest_Algorithm" json:"algorithm,omitempty"`
 	// TODO(erez): This field is no longer used by the server code.
 	// Remove this field after this new server code is released to prod.
 	// We must keep it for now, so that clients can still send it to the old
 	// server code currently in production.
-	UseSplitQueryV2      bool     `protobuf:"varint,8,opt,name=use_split_query_v2,json=useSplitQueryV2" json:"use_split_query_v2,omitempty"`
+	UseSplitQueryV2      bool     `protobuf:"varint,8,opt,name=use_split_query_v2,json=useSplitQueryV2,proto3" json:"use_split_query_v2,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -2887,7 +2896,7 @@ func (m *SplitQueryRequest) Reset()         { *m = SplitQueryRequest{} }
 func (m *SplitQueryRequest) String() string { return proto.CompactTextString(m) }
 func (*SplitQueryRequest) ProtoMessage()    {}
 func (*SplitQueryRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{39}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{39}
 }
 func (m *SplitQueryRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SplitQueryRequest.Unmarshal(m, b)
@@ -2966,7 +2975,7 @@ func (m *SplitQueryRequest) GetUseSplitQueryV2() bool {
 // SplitQueryResponse is the returned value from SplitQuery.
 type SplitQueryResponse struct {
 	// splits contains the queries to run to fetch the entire data set.
-	Splits               []*SplitQueryResponse_Part `protobuf:"bytes,1,rep,name=splits" json:"splits,omitempty"`
+	Splits               []*SplitQueryResponse_Part `protobuf:"bytes,1,rep,name=splits,proto3" json:"splits,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                   `json:"-"`
 	XXX_unrecognized     []byte                     `json:"-"`
 	XXX_sizecache        int32                      `json:"-"`
@@ -2976,7 +2985,7 @@ func (m *SplitQueryResponse) Reset()         { *m = SplitQueryResponse{} }
 func (m *SplitQueryResponse) String() string { return proto.CompactTextString(m) }
 func (*SplitQueryResponse) ProtoMessage()    {}
 func (*SplitQueryResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{40}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{40}
 }
 func (m *SplitQueryResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SplitQueryResponse.Unmarshal(m, b)
@@ -3005,9 +3014,9 @@ func (m *SplitQueryResponse) GetSplits() []*SplitQueryResponse_Part {
 
 type SplitQueryResponse_KeyRangePart struct {
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,1,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,1,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// key ranges to target the query to.
-	KeyRanges            []*topodata.KeyRange `protobuf:"bytes,2,rep,name=key_ranges,json=keyRanges" json:"key_ranges,omitempty"`
+	KeyRanges            []*topodata.KeyRange `protobuf:"bytes,2,rep,name=key_ranges,json=keyRanges,proto3" json:"key_ranges,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
 	XXX_unrecognized     []byte               `json:"-"`
 	XXX_sizecache        int32                `json:"-"`
@@ -3017,7 +3026,7 @@ func (m *SplitQueryResponse_KeyRangePart) Reset()         { *m = SplitQueryRespo
 func (m *SplitQueryResponse_KeyRangePart) String() string { return proto.CompactTextString(m) }
 func (*SplitQueryResponse_KeyRangePart) ProtoMessage()    {}
 func (*SplitQueryResponse_KeyRangePart) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{40, 0}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{40, 0}
 }
 func (m *SplitQueryResponse_KeyRangePart) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SplitQueryResponse_KeyRangePart.Unmarshal(m, b)
@@ -3053,9 +3062,9 @@ func (m *SplitQueryResponse_KeyRangePart) GetKeyRanges() []*topodata.KeyRange {
 
 type SplitQueryResponse_ShardPart struct {
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,1,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,1,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// shards to target the query to.
-	Shards               []string `protobuf:"bytes,2,rep,name=shards" json:"shards,omitempty"`
+	Shards               []string `protobuf:"bytes,2,rep,name=shards,proto3" json:"shards,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -3065,7 +3074,7 @@ func (m *SplitQueryResponse_ShardPart) Reset()         { *m = SplitQueryResponse
 func (m *SplitQueryResponse_ShardPart) String() string { return proto.CompactTextString(m) }
 func (*SplitQueryResponse_ShardPart) ProtoMessage()    {}
 func (*SplitQueryResponse_ShardPart) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{40, 1}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{40, 1}
 }
 func (m *SplitQueryResponse_ShardPart) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SplitQueryResponse_ShardPart.Unmarshal(m, b)
@@ -3101,14 +3110,14 @@ func (m *SplitQueryResponse_ShardPart) GetShards() []string {
 
 type SplitQueryResponse_Part struct {
 	// query is the query and bind variables to execute.
-	Query *query.BoundQuery `protobuf:"bytes,1,opt,name=query" json:"query,omitempty"`
+	Query *query.BoundQuery `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
 	// key_range_part is set if the query should be executed by
 	// ExecuteKeyRanges.
-	KeyRangePart *SplitQueryResponse_KeyRangePart `protobuf:"bytes,2,opt,name=key_range_part,json=keyRangePart" json:"key_range_part,omitempty"`
+	KeyRangePart *SplitQueryResponse_KeyRangePart `protobuf:"bytes,2,opt,name=key_range_part,json=keyRangePart,proto3" json:"key_range_part,omitempty"`
 	// shard_part is set if the query should be executed by ExecuteShards.
-	ShardPart *SplitQueryResponse_ShardPart `protobuf:"bytes,3,opt,name=shard_part,json=shardPart" json:"shard_part,omitempty"`
+	ShardPart *SplitQueryResponse_ShardPart `protobuf:"bytes,3,opt,name=shard_part,json=shardPart,proto3" json:"shard_part,omitempty"`
 	// size is the approximate number of rows this query will return.
-	Size                 int64    `protobuf:"varint,4,opt,name=size" json:"size,omitempty"`
+	Size                 int64    `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -3118,7 +3127,7 @@ func (m *SplitQueryResponse_Part) Reset()         { *m = SplitQueryResponse_Part
 func (m *SplitQueryResponse_Part) String() string { return proto.CompactTextString(m) }
 func (*SplitQueryResponse_Part) ProtoMessage()    {}
 func (*SplitQueryResponse_Part) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{40, 2}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{40, 2}
 }
 func (m *SplitQueryResponse_Part) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SplitQueryResponse_Part.Unmarshal(m, b)
@@ -3169,7 +3178,7 @@ func (m *SplitQueryResponse_Part) GetSize() int64 {
 // GetSrvKeyspaceRequest is the payload to GetSrvKeyspace.
 type GetSrvKeyspaceRequest struct {
 	// keyspace name to fetch.
-	Keyspace             string   `protobuf:"bytes,1,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace             string   `protobuf:"bytes,1,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -3179,7 +3188,7 @@ func (m *GetSrvKeyspaceRequest) Reset()         { *m = GetSrvKeyspaceRequest{} }
 func (m *GetSrvKeyspaceRequest) String() string { return proto.CompactTextString(m) }
 func (*GetSrvKeyspaceRequest) ProtoMessage()    {}
 func (*GetSrvKeyspaceRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{41}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{41}
 }
 func (m *GetSrvKeyspaceRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_GetSrvKeyspaceRequest.Unmarshal(m, b)
@@ -3209,7 +3218,7 @@ func (m *GetSrvKeyspaceRequest) GetKeyspace() string {
 // GetSrvKeyspaceResponse is the returned value from GetSrvKeyspace.
 type GetSrvKeyspaceResponse struct {
 	// srv_keyspace is the topology object for the SrvKeyspace.
-	SrvKeyspace          *topodata.SrvKeyspace `protobuf:"bytes,1,opt,name=srv_keyspace,json=srvKeyspace" json:"srv_keyspace,omitempty"`
+	SrvKeyspace          *topodata.SrvKeyspace `protobuf:"bytes,1,opt,name=srv_keyspace,json=srvKeyspace,proto3" json:"srv_keyspace,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
@@ -3219,7 +3228,7 @@ func (m *GetSrvKeyspaceResponse) Reset()         { *m = GetSrvKeyspaceResponse{}
 func (m *GetSrvKeyspaceResponse) String() string { return proto.CompactTextString(m) }
 func (*GetSrvKeyspaceResponse) ProtoMessage()    {}
 func (*GetSrvKeyspaceResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{42}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{42}
 }
 func (m *GetSrvKeyspaceResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_GetSrvKeyspaceResponse.Unmarshal(m, b)
@@ -3250,24 +3259,24 @@ func (m *GetSrvKeyspaceResponse) GetSrvKeyspace() *topodata.SrvKeyspace {
 type UpdateStreamRequest struct {
 	// caller_id identifies the caller. This is the effective caller ID,
 	// set by the application to further identify the caller.
-	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId" json:"caller_id,omitempty"`
+	CallerId *vtrpc.CallerID `protobuf:"bytes,1,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	// keyspace to target the query to.
-	Keyspace string `protobuf:"bytes,2,opt,name=keyspace" json:"keyspace,omitempty"`
+	Keyspace string `protobuf:"bytes,2,opt,name=keyspace,proto3" json:"keyspace,omitempty"`
 	// shard to target the query to, for unsharded keyspaces.
-	Shard string `protobuf:"bytes,3,opt,name=shard" json:"shard,omitempty"`
+	Shard string `protobuf:"bytes,3,opt,name=shard,proto3" json:"shard,omitempty"`
 	// KeyRange to target the query to, for sharded keyspaces.
-	KeyRange *topodata.KeyRange `protobuf:"bytes,4,opt,name=key_range,json=keyRange" json:"key_range,omitempty"`
+	KeyRange *topodata.KeyRange `protobuf:"bytes,4,opt,name=key_range,json=keyRange,proto3" json:"key_range,omitempty"`
 	// tablet_type is the type of tablets that this request is targeted to.
-	TabletType topodata.TabletType `protobuf:"varint,5,opt,name=tablet_type,json=tabletType,enum=topodata.TabletType" json:"tablet_type,omitempty"`
+	TabletType topodata.TabletType `protobuf:"varint,5,opt,name=tablet_type,json=tabletType,proto3,enum=topodata.TabletType" json:"tablet_type,omitempty"`
 	// timestamp is the timestamp to start the stream from.  It is
 	// unused is event is set, and we are only streaming from the shard
 	// described by event.shard.
-	Timestamp int64 `protobuf:"varint,6,opt,name=timestamp" json:"timestamp,omitempty"`
+	Timestamp int64 `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	// event is the event to start the stream from.
 	// Note it is only used if we are streaming from exactly the same shard
 	// as this event was coming from. Otherwise we can't use this event,
 	// and will use the timestamp as a starting point.
-	Event                *query.EventToken `protobuf:"bytes,7,opt,name=event" json:"event,omitempty"`
+	Event                *query.EventToken `protobuf:"bytes,7,opt,name=event,proto3" json:"event,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
 	XXX_unrecognized     []byte            `json:"-"`
 	XXX_sizecache        int32             `json:"-"`
@@ -3277,7 +3286,7 @@ func (m *UpdateStreamRequest) Reset()         { *m = UpdateStreamRequest{} }
 func (m *UpdateStreamRequest) String() string { return proto.CompactTextString(m) }
 func (*UpdateStreamRequest) ProtoMessage()    {}
 func (*UpdateStreamRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{43}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{43}
 }
 func (m *UpdateStreamRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_UpdateStreamRequest.Unmarshal(m, b)
@@ -3349,13 +3358,13 @@ func (m *UpdateStreamRequest) GetEvent() *query.EventToken {
 // UpdateStreamResponse is streamed by UpdateStream.
 type UpdateStreamResponse struct {
 	// event is one event from the stream.
-	Event *query.StreamEvent `protobuf:"bytes,1,opt,name=event" json:"event,omitempty"`
+	Event *query.StreamEvent `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
 	// resume_timestamp is the timestamp to resume streaming from if the
 	// client is interrupted. If the Update Stream only goes to one
 	// shard, this is equal to event.timestamp. If the Update Stream
 	// goes to multiple shards and aggregates, this is the minimum value
 	// of the current timestamp for all shards.
-	ResumeTimestamp      int64    `protobuf:"varint,2,opt,name=resume_timestamp,json=resumeTimestamp" json:"resume_timestamp,omitempty"`
+	ResumeTimestamp      int64    `protobuf:"varint,2,opt,name=resume_timestamp,json=resumeTimestamp,proto3" json:"resume_timestamp,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -3365,7 +3374,7 @@ func (m *UpdateStreamResponse) Reset()         { *m = UpdateStreamResponse{} }
 func (m *UpdateStreamResponse) String() string { return proto.CompactTextString(m) }
 func (*UpdateStreamResponse) ProtoMessage()    {}
 func (*UpdateStreamResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_vtgate_229a16ae636de397, []int{44}
+	return fileDescriptor_vtgate_8f5c6038eac4796e, []int{44}
 }
 func (m *UpdateStreamResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_UpdateStreamResponse.Unmarshal(m, b)
@@ -3453,125 +3462,126 @@ func init() {
 	proto.RegisterEnum("vtgate.TransactionMode", TransactionMode_name, TransactionMode_value)
 }
 
-func init() { proto.RegisterFile("vtgate.proto", fileDescriptor_vtgate_229a16ae636de397) }
+func init() { proto.RegisterFile("vtgate.proto", fileDescriptor_vtgate_8f5c6038eac4796e) }
 
-var fileDescriptor_vtgate_229a16ae636de397 = []byte{
-	// 1858 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x5a, 0x5b, 0x8f, 0x23, 0x47,
-	0x15, 0xa6, 0xbb, 0x7d, 0x3d, 0xbe, 0x6e, 0xad, 0x77, 0xd7, 0x71, 0x86, 0x1d, 0xa7, 0xc3, 0x28,
-	0x4e, 0xb2, 0xf2, 0x10, 0x07, 0x02, 0x42, 0x48, 0x90, 0xf1, 0x0e, 0x91, 0x95, 0x9d, 0xcd, 0x50,
-	0xf6, 0x26, 0x80, 0x88, 0x5a, 0x3d, 0x76, 0xc9, 0xdb, 0xd8, 0xee, 0x76, 0xba, 0xca, 0x0e, 0xc3,
-	0x03, 0xca, 0x3f, 0x88, 0x78, 0x40, 0x42, 0x11, 0x12, 0x42, 0x42, 0x42, 0x42, 0xe2, 0x15, 0x09,
-	0x78, 0xe1, 0x8d, 0x47, 0xc4, 0x13, 0xef, 0xfc, 0x01, 0x24, 0x7e, 0x41, 0xd4, 0x55, 0xd5, 0x17,
-	0xf7, 0x8c, 0x3d, 0x1e, 0xcf, 0x45, 0xde, 0xb7, 0xae, 0x53, 0xd5, 0x55, 0xdf, 0xf9, 0xce, 0x57,
-	0xa7, 0x4e, 0x97, 0x0d, 0xf9, 0x39, 0x1b, 0x9a, 0x8c, 0x34, 0xa7, 0xae, 0xc3, 0x1c, 0x94, 0x12,
-	0xad, 0x5a, 0xee, 0x93, 0x19, 0x71, 0x4f, 0x85, 0xb1, 0x56, 0x64, 0xce, 0xd4, 0x19, 0x98, 0xcc,
-	0x94, 0xed, 0xdc, 0x9c, 0xb9, 0xd3, 0xbe, 0x68, 0xe8, 0x7f, 0xd2, 0x20, 0xdd, 0x25, 0x94, 0x5a,
-	0x8e, 0x8d, 0xf6, 0xa0, 0x68, 0xd9, 0x06, 0x73, 0x4d, 0x9b, 0x9a, 0x7d, 0x66, 0x39, 0x76, 0x55,
-	0xa9, 0x2b, 0x8d, 0x0c, 0x2e, 0x58, 0x76, 0x2f, 0x34, 0xa2, 0x36, 0x14, 0xe9, 0x73, 0xd3, 0x1d,
-	0x18, 0x54, 0xbc, 0x47, 0xab, 0x6a, 0x5d, 0x6b, 0xe4, 0x5a, 0x3b, 0x4d, 0x89, 0x45, 0xce, 0xd7,
-	0xec, 0x7a, 0xa3, 0x64, 0x03, 0x17, 0x68, 0xa4, 0x45, 0xd1, 0xcb, 0x90, 0xa5, 0x96, 0x3d, 0x1c,
-	0x13, 0x63, 0x70, 0x52, 0xd5, 0xf8, 0x32, 0x19, 0x61, 0x78, 0x7c, 0x82, 0x1e, 0x02, 0x98, 0x33,
-	0xe6, 0xf4, 0x9d, 0xc9, 0xc4, 0x62, 0xd5, 0x04, 0xef, 0x8d, 0x58, 0xd0, 0xab, 0x50, 0x60, 0xa6,
-	0x3b, 0x24, 0xcc, 0xa0, 0xcc, 0xb5, 0xec, 0x61, 0x35, 0x59, 0x57, 0x1a, 0x59, 0x9c, 0x17, 0xc6,
-	0x2e, 0xb7, 0xa1, 0x7d, 0x48, 0x3b, 0x53, 0xc6, 0xf1, 0xa5, 0xea, 0x4a, 0x23, 0xd7, 0xba, 0xd7,
-	0x14, 0xac, 0x1c, 0xfe, 0x9c, 0xf4, 0x67, 0x8c, 0x7c, 0x20, 0x3a, 0xb1, 0x3f, 0x0a, 0x1d, 0x40,
-	0x39, 0xe2, 0xbb, 0x31, 0x71, 0x06, 0xa4, 0x9a, 0xae, 0x2b, 0x8d, 0x62, 0xeb, 0x81, 0xef, 0x59,
-	0x84, 0x86, 0x23, 0x67, 0x40, 0x70, 0x89, 0x2d, 0x1a, 0x6a, 0x3f, 0x85, 0x7c, 0xd4, 0x6b, 0xb4,
-	0x07, 0x29, 0x01, 0x8a, 0x53, 0x99, 0x6b, 0x15, 0x24, 0x86, 0x1e, 0x37, 0x62, 0xd9, 0xe9, 0x31,
-	0x1f, 0x5d, 0xda, 0x1a, 0x54, 0xd5, 0xba, 0xd2, 0xd0, 0x70, 0x21, 0x62, 0xed, 0x0c, 0xf4, 0x7f,
-	0xa9, 0x50, 0x94, 0xe8, 0x31, 0xf9, 0x64, 0x46, 0x28, 0x43, 0x8f, 0x20, 0xdb, 0x37, 0xc7, 0x63,
-	0xe2, 0x7a, 0x2f, 0x89, 0x35, 0x4a, 0x4d, 0x11, 0xe0, 0x36, 0xb7, 0x77, 0x1e, 0xe3, 0x8c, 0x18,
-	0xd1, 0x19, 0xa0, 0xd7, 0x21, 0x2d, 0x83, 0xc6, 0x17, 0x10, 0x63, 0xa3, 0x31, 0xc3, 0x7e, 0x3f,
-	0x7a, 0x0d, 0x92, 0x1c, 0x2a, 0x0f, 0x4e, 0xae, 0x75, 0x47, 0x02, 0x3f, 0x70, 0x66, 0xf6, 0xe0,
-	0x87, 0xde, 0x23, 0x16, 0xfd, 0xe8, 0x9b, 0x90, 0x63, 0xe6, 0xc9, 0x98, 0x30, 0x83, 0x9d, 0x4e,
-	0x09, 0x8f, 0x56, 0xb1, 0x55, 0x69, 0x06, 0xa2, 0xeb, 0xf1, 0xce, 0xde, 0xe9, 0x94, 0x60, 0x60,
-	0xc1, 0x33, 0x7a, 0x04, 0xc8, 0x76, 0x98, 0x11, 0x13, 0x5c, 0x92, 0xc7, 0xba, 0x6c, 0x3b, 0xac,
-	0xb3, 0xa0, 0xb9, 0x3d, 0x28, 0x8e, 0xc8, 0x29, 0x9d, 0x9a, 0x7d, 0x62, 0x70, 0x21, 0xf1, 0x98,
-	0x66, 0x71, 0xc1, 0xb7, 0x72, 0xd6, 0xa3, 0x31, 0x4f, 0xaf, 0x13, 0x73, 0xfd, 0x73, 0x05, 0x4a,
-	0x01, 0xa3, 0x74, 0xea, 0xd8, 0x94, 0xa0, 0x3d, 0x48, 0x12, 0xd7, 0x75, 0xdc, 0x18, 0x9d, 0xf8,
-	0xb8, 0x7d, 0xe8, 0x99, 0xb1, 0xe8, 0xbd, 0x0c, 0x97, 0x6f, 0x40, 0xca, 0x25, 0x74, 0x36, 0x66,
-	0x92, 0x4c, 0x24, 0x51, 0x09, 0x1e, 0x79, 0x0f, 0x96, 0x23, 0xf4, 0xff, 0xaa, 0x50, 0x91, 0x88,
-	0xb8, 0x4f, 0x74, 0x7b, 0x22, 0x5d, 0x83, 0x8c, 0x4f, 0x37, 0x0f, 0x73, 0x16, 0x07, 0x6d, 0x74,
-	0x1f, 0x52, 0x3c, 0x2e, 0xb4, 0x9a, 0xac, 0x6b, 0x8d, 0x2c, 0x96, 0xad, 0xb8, 0x3a, 0x52, 0x57,
-	0x52, 0x47, 0x7a, 0x89, 0x3a, 0x22, 0x61, 0xcf, 0xac, 0x15, 0xf6, 0x5f, 0x2b, 0x70, 0x2f, 0x46,
-	0xf2, 0x56, 0x04, 0xff, 0xff, 0x2a, 0xbc, 0x24, 0x71, 0xbd, 0x2f, 0x99, 0xed, 0xbc, 0x28, 0x0a,
-	0x78, 0x05, 0xf2, 0xc1, 0x16, 0xb5, 0xa4, 0x0e, 0xf2, 0x38, 0x37, 0x0a, 0xfd, 0xd8, 0x52, 0x31,
-	0x7c, 0xa1, 0x40, 0xed, 0x3c, 0xd2, 0xb7, 0x42, 0x11, 0x9f, 0x69, 0xf0, 0x20, 0x04, 0x87, 0x4d,
-	0x7b, 0x48, 0x5e, 0x10, 0x3d, 0xbc, 0x05, 0x30, 0x22, 0xa7, 0x86, 0xcb, 0x21, 0x73, 0x35, 0x78,
-	0x9e, 0x06, 0xb1, 0xf6, 0xbd, 0xc1, 0xd9, 0x91, 0xef, 0xd7, 0x96, 0xea, 0xe3, 0x37, 0x0a, 0x54,
-	0xcf, 0x86, 0x60, 0x2b, 0xd4, 0xf1, 0xd7, 0x44, 0xa0, 0x8e, 0x43, 0x9b, 0x59, 0xec, 0xf4, 0x85,
-	0xc9, 0x16, 0x8f, 0x00, 0x11, 0x8e, 0xd8, 0xe8, 0x3b, 0xe3, 0xd9, 0xc4, 0x36, 0x6c, 0x73, 0x42,
-	0x64, 0x1d, 0x57, 0x16, 0x3d, 0x6d, 0xde, 0xf1, 0xd4, 0x9c, 0x10, 0xf4, 0x23, 0xb8, 0x2b, 0x47,
-	0x2f, 0xa4, 0x98, 0x14, 0x17, 0x55, 0xc3, 0x47, 0xba, 0x84, 0x89, 0xa6, 0x6f, 0xc0, 0x77, 0xc4,
-	0x24, 0xef, 0x2f, 0x4f, 0x49, 0xe9, 0x2b, 0x49, 0x2e, 0x73, 0xb1, 0xe4, 0xb2, 0xeb, 0x48, 0xae,
-	0x76, 0x02, 0x19, 0x1f, 0x34, 0xda, 0x85, 0x04, 0x87, 0xa6, 0x70, 0x68, 0x39, 0xbf, 0x80, 0xf4,
-	0x10, 0xf1, 0x0e, 0x54, 0x81, 0xe4, 0xdc, 0x1c, 0xcf, 0x08, 0x0f, 0x5c, 0x1e, 0x8b, 0x06, 0xda,
-	0x85, 0x5c, 0x84, 0x2b, 0x1e, 0xab, 0x3c, 0x86, 0x30, 0x1b, 0x47, 0x65, 0x1d, 0x61, 0x6c, 0x2b,
-	0x64, 0xfd, 0x6f, 0x15, 0xee, 0x4a, 0x68, 0x07, 0x26, 0xeb, 0x3f, 0xbf, 0x71, 0x49, 0xbf, 0x09,
-	0x69, 0x0f, 0x8d, 0x45, 0x68, 0x55, 0xe3, 0x9a, 0x3a, 0x47, 0xd4, 0xfe, 0x88, 0x4d, 0x0b, 0xde,
-	0x3d, 0x28, 0x9a, 0xf4, 0x9c, 0x62, 0xb7, 0x60, 0xd2, 0xdb, 0xa8, 0x74, 0xbf, 0x50, 0x82, 0xba,
-	0x52, 0x72, 0x7a, 0x63, 0xa1, 0xfe, 0x3a, 0xa4, 0x45, 0x20, 0x7d, 0x36, 0xef, 0x4b, 0x6c, 0x22,
-	0xcc, 0x1f, 0x59, 0xec, 0xb9, 0x98, 0xda, 0x1f, 0xa6, 0xdb, 0x50, 0xe2, 0x4c, 0x73, 0xdf, 0x38,
-	0xdd, 0x61, 0x96, 0x51, 0x2e, 0x91, 0x65, 0xd4, 0xa5, 0x55, 0xa9, 0x16, 0xad, 0x4a, 0xf5, 0xbf,
-	0x84, 0x75, 0x16, 0x27, 0xe3, 0x96, 0x2a, 0xed, 0xb7, 0xe2, 0x32, 0x0b, 0x3e, 0x2c, 0x63, 0xde,
-	0xdf, 0x96, 0xd8, 0x2e, 0xfb, 0x8d, 0xac, 0xff, 0x36, 0xac, 0x95, 0x16, 0x88, 0xbb, 0x31, 0x2d,
-	0x3d, 0x8a, 0x6b, 0xe9, 0xbc, 0xbc, 0x11, 0xe8, 0xe8, 0x97, 0x50, 0xe1, 0x4c, 0x86, 0x19, 0xfe,
-	0x1a, 0xc5, 0x14, 0x2f, 0x70, 0xb5, 0x33, 0x05, 0xae, 0xfe, 0x0f, 0x15, 0x1e, 0x46, 0xe9, 0xb9,
-	0xcd, 0x22, 0xfe, 0x9d, 0xb8, 0xb8, 0x76, 0x16, 0xc4, 0x15, 0xa3, 0x64, 0x6b, 0x15, 0xf6, 0x7b,
-	0x05, 0x76, 0x97, 0x52, 0xb8, 0x25, 0x32, 0xfb, 0xa3, 0x0a, 0x95, 0x2e, 0x73, 0x89, 0x39, 0xb9,
-	0xd2, 0x6d, 0x4c, 0xa0, 0x4a, 0xf5, 0x72, 0x57, 0x2c, 0xda, 0xfa, 0x21, 0x8a, 0x1d, 0x25, 0x89,
-	0x0b, 0x8e, 0x92, 0xe4, 0x5a, 0x17, 0x65, 0x11, 0x5e, 0x53, 0xab, 0x79, 0xd5, 0xdb, 0x70, 0x2f,
-	0x46, 0x94, 0x0c, 0x61, 0x58, 0x0e, 0x28, 0x17, 0x96, 0x03, 0x9f, 0xab, 0x50, 0x5b, 0x98, 0xe5,
-	0x2a, 0xe9, 0x7a, 0x6d, 0xd2, 0xa3, 0xa9, 0x40, 0x5b, 0x7a, 0xae, 0x24, 0x56, 0xdd, 0x76, 0x24,
-	0xd7, 0x0c, 0xd4, 0xa5, 0x37, 0x49, 0x07, 0x5e, 0x3e, 0x97, 0x90, 0x0d, 0xc8, 0xfd, 0x9d, 0x0a,
-	0xbb, 0x0b, 0x73, 0x5d, 0x39, 0x67, 0x5d, 0x0b, 0xc3, 0xf1, 0x64, 0x9b, 0xb8, 0xf0, 0x36, 0xe1,
-	0xc6, 0xc8, 0x7e, 0x0a, 0xf5, 0xe5, 0x04, 0x6d, 0xc0, 0xf8, 0x9f, 0x55, 0xf8, 0x6a, 0x7c, 0xc2,
-	0xab, 0x7c, 0xd8, 0x5f, 0x0b, 0xdf, 0x8b, 0x5f, 0xeb, 0x89, 0x0d, 0xbe, 0xd6, 0x6f, 0x8c, 0xff,
-	0x27, 0xf0, 0x70, 0x19, 0x5d, 0x1b, 0xb0, 0xff, 0x63, 0xc8, 0x1f, 0x90, 0xa1, 0x65, 0x6f, 0xc6,
-	0xf5, 0xc2, 0xcf, 0x16, 0xea, 0xe2, 0xcf, 0x16, 0xfa, 0x77, 0xa0, 0x20, 0xa7, 0x96, 0xb8, 0x22,
-	0x89, 0x52, 0xb9, 0x20, 0x51, 0x7e, 0xa6, 0x40, 0xa1, 0xcd, 0x7f, 0xdd, 0xb8, 0xf1, 0x42, 0xe1,
-	0x3e, 0xa4, 0x4c, 0xe6, 0x4c, 0xac, 0xbe, 0xfc, 0xdd, 0x45, 0xb6, 0xf4, 0x32, 0x14, 0x7d, 0x04,
-	0x02, 0xbf, 0xfe, 0x33, 0x28, 0x61, 0x67, 0x3c, 0x3e, 0x31, 0xfb, 0xa3, 0x9b, 0x46, 0xa5, 0x23,
-	0x28, 0x87, 0x6b, 0xc9, 0xf5, 0x3f, 0x86, 0x97, 0x30, 0xa1, 0xce, 0x78, 0x4e, 0x22, 0x25, 0xc5,
-	0x66, 0x48, 0x10, 0x24, 0x06, 0x4c, 0xfe, 0xae, 0x92, 0xc5, 0xfc, 0x59, 0xff, 0xbb, 0x02, 0x95,
-	0x23, 0x42, 0xa9, 0x39, 0x24, 0x42, 0x60, 0x9b, 0x4d, 0xbd, 0xaa, 0x66, 0xac, 0x40, 0x52, 0x9c,
-	0xbc, 0x62, 0xbf, 0x89, 0x06, 0xda, 0x87, 0x6c, 0xb0, 0xd9, 0xf8, 0x99, 0x7c, 0xfe, 0x5e, 0xcb,
-	0xf8, 0x7b, 0xcd, 0x43, 0x1f, 0xb9, 0x1f, 0xe1, 0xcf, 0xfa, 0xaf, 0x14, 0xb8, 0x23, 0xd1, 0xbf,
-	0xbb, 0x69, 0x7c, 0x56, 0x41, 0xf7, 0xd7, 0xd4, 0xc2, 0x35, 0xd1, 0x43, 0xd0, 0xfc, 0x64, 0x9c,
-	0x6b, 0xe5, 0xe5, 0x2e, 0xfb, 0xd0, 0x1c, 0xcf, 0x08, 0xf6, 0x3a, 0xf4, 0x23, 0xc8, 0x77, 0x22,
-	0x95, 0x26, 0xda, 0x01, 0x35, 0x80, 0xb1, 0x38, 0x5c, 0xb5, 0x06, 0xf1, 0x2b, 0x0a, 0xf5, 0xcc,
-	0x15, 0xc5, 0xdf, 0x14, 0xd8, 0x09, 0x5d, 0xbc, 0xf2, 0xc1, 0x74, 0x59, 0x6f, 0xbf, 0x0b, 0x25,
-	0x6b, 0x60, 0x9c, 0x39, 0x86, 0x72, 0xad, 0x8a, 0xaf, 0xe2, 0xa8, 0xb3, 0xb8, 0x60, 0x45, 0x5a,
-	0x54, 0xdf, 0x81, 0xda, 0x79, 0xe2, 0x95, 0xd2, 0xfe, 0x9f, 0x0a, 0x77, 0xba, 0xd3, 0xb1, 0xc5,
-	0x64, 0x8e, 0xba, 0x6e, 0x7f, 0xd6, 0xbe, 0xa4, 0x7b, 0x05, 0xf2, 0xd4, 0xc3, 0x21, 0xef, 0xe1,
-	0x64, 0x41, 0x93, 0xe3, 0x36, 0x71, 0x03, 0xe7, 0xc5, 0xc9, 0x1f, 0x32, 0xb3, 0x19, 0x17, 0xa1,
-	0x86, 0x41, 0x8e, 0x98, 0xd9, 0x0c, 0x7d, 0x03, 0x1e, 0xd8, 0xb3, 0x89, 0xe1, 0x3a, 0x9f, 0x52,
-	0x63, 0x4a, 0x5c, 0x83, 0xcf, 0x6c, 0x4c, 0x4d, 0x97, 0xf1, 0x14, 0xaf, 0xe1, 0xbb, 0xf6, 0x6c,
-	0x82, 0x9d, 0x4f, 0xe9, 0x31, 0x71, 0xf9, 0xe2, 0xc7, 0xa6, 0xcb, 0xd0, 0xf7, 0x21, 0x6b, 0x8e,
-	0x87, 0x8e, 0x6b, 0xb1, 0xe7, 0x13, 0x79, 0xf1, 0xa6, 0x4b, 0x98, 0x67, 0x98, 0x69, 0xbe, 0xeb,
-	0x8f, 0xc4, 0xe1, 0x4b, 0xe8, 0x4d, 0x40, 0x33, 0x4a, 0x0c, 0x01, 0x4e, 0x2c, 0x3a, 0x6f, 0xc9,
-	0x5b, 0xb8, 0xd2, 0x8c, 0x92, 0x70, 0x9a, 0x0f, 0x5b, 0xfa, 0x3f, 0x35, 0x40, 0xd1, 0x79, 0x65,
-	0x8e, 0xfe, 0x16, 0xa4, 0xf8, 0xfb, 0xb4, 0xaa, 0xf0, 0xd8, 0xee, 0x06, 0x19, 0xea, 0xcc, 0xd8,
-	0xa6, 0x07, 0x1b, 0xcb, 0xe1, 0xb5, 0x8f, 0x21, 0xef, 0xef, 0x54, 0xee, 0x4e, 0x34, 0x1a, 0xca,
-	0xca, 0xd3, 0x55, 0x5d, 0xe3, 0x74, 0xad, 0x7d, 0x0f, 0xb2, 0xbc, 0xaa, 0xbb, 0x70, 0xee, 0xb0,
-	0x16, 0x55, 0xa3, 0xb5, 0x68, 0xed, 0x3f, 0x0a, 0x24, 0xf8, 0xcb, 0x6b, 0x7f, 0xfc, 0x1e, 0xf1,
-	0xef, 0x05, 0x81, 0x52, 0x44, 0x4f, 0x24, 0xed, 0xd7, 0x56, 0x50, 0x12, 0xa5, 0x00, 0xe7, 0x47,
-	0x51, 0x42, 0xda, 0x00, 0xe2, 0x7f, 0x02, 0x7c, 0x2a, 0xa1, 0xc3, 0xaf, 0xad, 0x98, 0x2a, 0x70,
-	0x17, 0x67, 0x69, 0xe0, 0x39, 0x82, 0x04, 0xb5, 0x7e, 0x21, 0xb2, 0xa4, 0x86, 0xf9, 0xb3, 0xfe,
-	0x36, 0xdc, 0x7b, 0x8f, 0xb0, 0xae, 0x3b, 0xf7, 0xb7, 0x9b, 0xbf, 0x7d, 0x56, 0xd0, 0xa4, 0x63,
-	0xb8, 0x1f, 0x7f, 0x49, 0x2a, 0xe0, 0xdb, 0x90, 0xa7, 0xee, 0xdc, 0x58, 0x78, 0xd3, 0xab, 0x4a,
-	0x82, 0xf0, 0x44, 0x5f, 0xca, 0xd1, 0xb0, 0xa1, 0xff, 0x41, 0x85, 0xbb, 0xcf, 0xa6, 0x03, 0x93,
-	0x6d, 0xfb, 0xf9, 0xb1, 0x61, 0xa9, 0xb6, 0x03, 0x59, 0x66, 0x4d, 0x08, 0x65, 0xe6, 0x64, 0x2a,
-	0x77, 0x72, 0x68, 0xf0, 0x74, 0x45, 0xe6, 0xc4, 0x66, 0xf2, 0x02, 0xd2, 0xd7, 0xd5, 0xa1, 0x67,
-	0xeb, 0x39, 0x23, 0x62, 0x63, 0xd1, 0xaf, 0x8f, 0xa0, 0xb2, 0xc8, 0x92, 0x24, 0xbe, 0xe1, 0x4f,
-	0xb0, 0x58, 0xb5, 0xc9, 0x62, 0xcf, 0xeb, 0x91, 0x33, 0xa0, 0xd7, 0xa1, 0xec, 0x95, 0x6f, 0x13,
-	0x62, 0x84, 0x78, 0xc4, 0x3f, 0x24, 0x4a, 0xc2, 0xde, 0xf3, 0xcd, 0x6f, 0x3c, 0x86, 0x52, 0xec,
-	0x5f, 0x1a, 0xa8, 0x04, 0xb9, 0x67, 0x4f, 0xbb, 0xc7, 0x87, 0xed, 0xce, 0x0f, 0x3a, 0x87, 0x8f,
-	0xcb, 0x5f, 0x41, 0x00, 0xa9, 0x6e, 0xe7, 0xe9, 0x7b, 0x4f, 0x0e, 0xcb, 0x0a, 0xca, 0x42, 0xf2,
-	0xe8, 0xd9, 0x93, 0x5e, 0xa7, 0xac, 0x7a, 0x8f, 0xbd, 0x8f, 0x3e, 0x38, 0x6e, 0x97, 0xb5, 0x83,
-	0x77, 0xa0, 0x64, 0x39, 0xcd, 0xb9, 0xc5, 0x08, 0xa5, 0xe2, 0x9f, 0x32, 0x3f, 0x79, 0x55, 0xb6,
-	0x2c, 0x67, 0x5f, 0x3c, 0xed, 0x0f, 0x9d, 0xfd, 0x39, 0xdb, 0xe7, 0xbd, 0xfb, 0x42, 0xd6, 0x27,
-	0x29, 0xde, 0x7a, 0xfb, 0xcb, 0x00, 0x00, 0x00, 0xff, 0xff, 0x61, 0xd9, 0xf8, 0xab, 0x97, 0x23,
-	0x00, 0x00,
+var fileDescriptor_vtgate_8f5c6038eac4796e = []byte{
+	// 1883 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x5a, 0x4f, 0x8f, 0x23, 0x47,
+	0x15, 0xa7, 0xbb, 0xfd, 0xf7, 0xf9, 0xef, 0xd6, 0x78, 0x77, 0x1d, 0x67, 0xd8, 0x99, 0x74, 0x18,
+	0xc5, 0x49, 0x56, 0x36, 0x71, 0x20, 0x20, 0x84, 0x04, 0x19, 0xef, 0x10, 0x59, 0xd9, 0xd9, 0x0c,
+	0x65, 0x6f, 0x16, 0x10, 0x51, 0xab, 0xc7, 0x2e, 0x79, 0x1b, 0xdb, 0xdd, 0x4e, 0x57, 0xd9, 0xcb,
+	0x70, 0x40, 0xf9, 0x06, 0x11, 0x07, 0x24, 0x14, 0x21, 0x21, 0x24, 0x24, 0x4e, 0x5c, 0x91, 0x80,
+	0x0b, 0x37, 0x8e, 0x88, 0x13, 0x07, 0x6e, 0x7c, 0x01, 0x24, 0x3e, 0x41, 0xd4, 0x55, 0xd5, 0x7f,
+	0xdc, 0x33, 0xf6, 0x78, 0x3c, 0x3b, 0x2b, 0xef, 0xc5, 0xea, 0x7a, 0x55, 0xf5, 0xea, 0xbd, 0xdf,
+	0xfb, 0xd5, 0xab, 0xd7, 0xd5, 0x86, 0xfc, 0x9c, 0x0d, 0x4d, 0x46, 0x1a, 0x53, 0xd7, 0x61, 0x0e,
+	0x4a, 0x89, 0x56, 0x2d, 0xf7, 0xe9, 0x8c, 0xb8, 0x67, 0x42, 0x58, 0x2b, 0x32, 0x67, 0xea, 0x0c,
+	0x4c, 0x66, 0xca, 0x76, 0x6e, 0xce, 0xdc, 0x69, 0x5f, 0x34, 0xf4, 0xff, 0x68, 0x90, 0xee, 0x12,
+	0x4a, 0x2d, 0xc7, 0x46, 0x07, 0x50, 0xb4, 0x6c, 0x83, 0xb9, 0xa6, 0x4d, 0xcd, 0x3e, 0xb3, 0x1c,
+	0xbb, 0xaa, 0xec, 0x2b, 0xf5, 0x0c, 0x2e, 0x58, 0x76, 0x2f, 0x14, 0xa2, 0x36, 0x14, 0xe9, 0x53,
+	0xd3, 0x1d, 0x18, 0x54, 0xcc, 0xa3, 0x55, 0x75, 0x5f, 0xab, 0xe7, 0x5a, 0xbb, 0x0d, 0x69, 0x8b,
+	0xd4, 0xd7, 0xe8, 0x7a, 0xa3, 0x64, 0x03, 0x17, 0x68, 0xa4, 0x45, 0xd1, 0xab, 0x90, 0xa5, 0x96,
+	0x3d, 0x1c, 0x13, 0x63, 0x70, 0x5a, 0xd5, 0xf8, 0x32, 0x19, 0x21, 0x78, 0x70, 0x8a, 0xee, 0x01,
+	0x98, 0x33, 0xe6, 0xf4, 0x9d, 0xc9, 0xc4, 0x62, 0xd5, 0x04, 0xef, 0x8d, 0x48, 0xd0, 0xeb, 0x50,
+	0x60, 0xa6, 0x3b, 0x24, 0xcc, 0xa0, 0xcc, 0xb5, 0xec, 0x61, 0x35, 0xb9, 0xaf, 0xd4, 0xb3, 0x38,
+	0x2f, 0x84, 0x5d, 0x2e, 0x43, 0x4d, 0x48, 0x3b, 0x53, 0xc6, 0xed, 0x4b, 0xed, 0x2b, 0xf5, 0x5c,
+	0xeb, 0x76, 0x43, 0xa0, 0x72, 0xf4, 0x73, 0xd2, 0x9f, 0x31, 0xf2, 0x91, 0xe8, 0xc4, 0xfe, 0x28,
+	0x74, 0x08, 0xe5, 0x88, 0xef, 0xc6, 0xc4, 0x19, 0x90, 0x6a, 0x7a, 0x5f, 0xa9, 0x17, 0x5b, 0x77,
+	0x7d, 0xcf, 0x22, 0x30, 0x1c, 0x3b, 0x03, 0x82, 0x4b, 0x6c, 0x51, 0x80, 0x9a, 0x90, 0x79, 0x66,
+	0xba, 0xb6, 0x65, 0x0f, 0x69, 0x35, 0xc3, 0x51, 0xd9, 0x91, 0xab, 0xfe, 0xd0, 0xfb, 0x7d, 0x22,
+	0xfa, 0x70, 0x30, 0xa8, 0xf6, 0x53, 0xc8, 0x47, 0x61, 0x42, 0x07, 0x90, 0x12, 0x5e, 0x70, 0xec,
+	0x73, 0xad, 0x82, 0x9c, 0xde, 0xe3, 0x42, 0x2c, 0x3b, 0xbd, 0x50, 0x45, 0x6d, 0xb5, 0x06, 0x55,
+	0x75, 0x5f, 0xa9, 0x6b, 0xb8, 0x10, 0x91, 0x76, 0x06, 0xfa, 0x3f, 0x55, 0x28, 0x4a, 0x77, 0x31,
+	0xf9, 0x74, 0x46, 0x28, 0x43, 0xf7, 0x21, 0xdb, 0x37, 0xc7, 0x63, 0xe2, 0x7a, 0x93, 0xc4, 0x1a,
+	0xa5, 0x86, 0x60, 0x44, 0x9b, 0xcb, 0x3b, 0x0f, 0x70, 0x46, 0x8c, 0xe8, 0x0c, 0xd0, 0x9b, 0x90,
+	0x96, 0x51, 0xe6, 0x0b, 0x88, 0xb1, 0xd1, 0x20, 0x63, 0xbf, 0x1f, 0xbd, 0x01, 0x49, 0x6e, 0x2a,
+	0x8f, 0x66, 0xae, 0x75, 0x4b, 0x1a, 0x7e, 0xe8, 0xcc, 0xec, 0x01, 0x77, 0x1e, 0x8b, 0x7e, 0xf4,
+	0x4d, 0xc8, 0x31, 0xf3, 0x74, 0x4c, 0x98, 0xc1, 0xce, 0xa6, 0x84, 0x87, 0xb7, 0xd8, 0xaa, 0x34,
+	0x02, 0x96, 0xf6, 0x78, 0x67, 0xef, 0x6c, 0x4a, 0x30, 0xb0, 0xe0, 0x19, 0xdd, 0x07, 0x64, 0x3b,
+	0xcc, 0x88, 0x31, 0x34, 0xc9, 0xc9, 0x51, 0xb6, 0x1d, 0xd6, 0x59, 0x20, 0xe9, 0x01, 0x14, 0x47,
+	0xe4, 0x8c, 0x4e, 0xcd, 0x3e, 0x31, 0x38, 0xf3, 0x38, 0x09, 0xb2, 0xb8, 0xe0, 0x4b, 0x39, 0xea,
+	0x51, 0x92, 0xa4, 0xd7, 0x21, 0x89, 0xfe, 0xb9, 0x02, 0xa5, 0x00, 0x51, 0x3a, 0x75, 0x6c, 0x4a,
+	0xd0, 0x01, 0x24, 0x89, 0xeb, 0x3a, 0x6e, 0x0c, 0x4e, 0x7c, 0xd2, 0x3e, 0xf2, 0xc4, 0x58, 0xf4,
+	0x5e, 0x05, 0xcb, 0xb7, 0x20, 0xe5, 0x12, 0x3a, 0x1b, 0x33, 0x09, 0x26, 0x8a, 0x92, 0x08, 0xf3,
+	0x1e, 0x2c, 0x47, 0xe8, 0xff, 0x55, 0xa1, 0x22, 0x2d, 0xe2, 0x3e, 0xd1, 0xed, 0x89, 0x74, 0x0d,
+	0x32, 0x3e, 0xdc, 0x3c, 0xcc, 0x59, 0x1c, 0xb4, 0xd1, 0x1d, 0x48, 0xf1, 0xb8, 0xd0, 0x6a, 0x72,
+	0x5f, 0xab, 0x67, 0xb1, 0x6c, 0xc5, 0xd9, 0x91, 0xba, 0x16, 0x3b, 0xd2, 0x4b, 0xd8, 0x11, 0x09,
+	0x7b, 0x66, 0xad, 0xb0, 0xff, 0x5a, 0x81, 0xdb, 0x31, 0x90, 0xb7, 0x22, 0xf8, 0xff, 0x57, 0xe1,
+	0x15, 0x69, 0xd7, 0x87, 0x12, 0xd9, 0xce, 0xcb, 0xc2, 0x80, 0xd7, 0x20, 0x1f, 0x6c, 0x51, 0x4b,
+	0xf2, 0x20, 0x8f, 0x73, 0xa3, 0xd0, 0x8f, 0x2d, 0x25, 0xc3, 0x17, 0x0a, 0xd4, 0x2e, 0x02, 0x7d,
+	0x2b, 0x18, 0xf1, 0x99, 0x06, 0x77, 0x43, 0xe3, 0xb0, 0x69, 0x0f, 0xc9, 0x4b, 0xc2, 0x87, 0x77,
+	0x00, 0x46, 0xe4, 0xcc, 0x70, 0xb9, 0xc9, 0x9c, 0x0d, 0x9e, 0xa7, 0x41, 0xac, 0x7d, 0x6f, 0x70,
+	0x76, 0xe4, 0xfb, 0xb5, 0xa5, 0xfc, 0xf8, 0x8d, 0x02, 0xd5, 0xf3, 0x21, 0xd8, 0x0a, 0x76, 0xfc,
+	0x25, 0x11, 0xb0, 0xe3, 0xc8, 0x66, 0x16, 0x3b, 0x7b, 0x69, 0xb2, 0xc5, 0x7d, 0x40, 0x84, 0x5b,
+	0x6c, 0xf4, 0x9d, 0xf1, 0x6c, 0x62, 0x1b, 0xb6, 0x39, 0x21, 0xb2, 0xf0, 0x2b, 0x8b, 0x9e, 0x36,
+	0xef, 0x78, 0x64, 0x4e, 0x08, 0xfa, 0x11, 0xec, 0xc8, 0xd1, 0x0b, 0x29, 0x26, 0xc5, 0x49, 0x55,
+	0xf7, 0x2d, 0x5d, 0x82, 0x44, 0xc3, 0x17, 0xe0, 0x5b, 0x42, 0xc9, 0x87, 0xcb, 0x53, 0x52, 0xfa,
+	0x5a, 0x94, 0xcb, 0x5c, 0x4e, 0xb9, 0xec, 0x3a, 0x94, 0xab, 0x9d, 0x42, 0xc6, 0x37, 0x1a, 0xed,
+	0x41, 0x82, 0x9b, 0xa6, 0x70, 0xd3, 0x72, 0x7e, 0x01, 0xe9, 0x59, 0xc4, 0x3b, 0x50, 0x05, 0x92,
+	0x73, 0x73, 0x3c, 0x23, 0x3c, 0x70, 0x79, 0x2c, 0x1a, 0x68, 0x0f, 0x72, 0x11, 0xac, 0x78, 0xac,
+	0xf2, 0x18, 0xc2, 0x6c, 0x1c, 0xa5, 0x75, 0x04, 0xb1, 0xad, 0xa0, 0xf5, 0xbf, 0x54, 0xd8, 0x91,
+	0xa6, 0x1d, 0x9a, 0xac, 0xff, 0xf4, 0xc6, 0x29, 0xfd, 0x36, 0xa4, 0x3d, 0x6b, 0x2c, 0x42, 0xab,
+	0x1a, 0xe7, 0xd4, 0x05, 0xa4, 0xf6, 0x47, 0x6c, 0x5a, 0xf0, 0x1e, 0x40, 0xd1, 0xa4, 0x17, 0x14,
+	0xbb, 0x05, 0x93, 0xbe, 0x88, 0x4a, 0xf7, 0x0b, 0x25, 0xa8, 0x2b, 0x25, 0xa6, 0x37, 0x16, 0xea,
+	0xaf, 0x43, 0x5a, 0x04, 0xd2, 0x47, 0xf3, 0x8e, 0xb4, 0x4d, 0x84, 0xf9, 0x89, 0xc5, 0x9e, 0x0a,
+	0xd5, 0xfe, 0x30, 0xdd, 0x86, 0x12, 0x47, 0x9a, 0xfb, 0xc6, 0xe1, 0x0e, 0xb3, 0x8c, 0x72, 0x85,
+	0x2c, 0xa3, 0x2e, 0xad, 0x4a, 0xb5, 0x68, 0x55, 0xaa, 0xff, 0x39, 0xac, 0xb3, 0x38, 0x18, 0x2f,
+	0xa8, 0xd2, 0x7e, 0x27, 0x4e, 0xb3, 0xe0, 0x4d, 0x34, 0xe6, 0xfd, 0x8b, 0x22, 0xdb, 0x55, 0x5f,
+	0xaa, 0xf5, 0xdf, 0x86, 0xb5, 0xd2, 0x02, 0x70, 0x37, 0xc6, 0xa5, 0xfb, 0x71, 0x2e, 0x5d, 0x94,
+	0x37, 0x02, 0x1e, 0xfd, 0x12, 0x2a, 0x1c, 0xc9, 0x30, 0xc3, 0x3f, 0x47, 0x32, 0xc5, 0x0b, 0x5c,
+	0xed, 0x5c, 0x81, 0xab, 0xff, 0x5d, 0x85, 0x7b, 0x51, 0x78, 0x5e, 0x64, 0x11, 0xff, 0x5e, 0x9c,
+	0x5c, 0xbb, 0x0b, 0xe4, 0x8a, 0x41, 0xb2, 0xb5, 0x0c, 0xfb, 0xbd, 0x02, 0x7b, 0x4b, 0x21, 0xdc,
+	0x12, 0x9a, 0xfd, 0x51, 0x85, 0x4a, 0x97, 0xb9, 0xc4, 0x9c, 0x5c, 0xeb, 0x36, 0x26, 0x60, 0xa5,
+	0x7a, 0xb5, 0x2b, 0x16, 0x6d, 0xfd, 0x10, 0xc5, 0x8e, 0x92, 0xc4, 0x25, 0x47, 0x49, 0x72, 0xad,
+	0x9b, 0xb5, 0x08, 0xae, 0xa9, 0xd5, 0xb8, 0xea, 0x6d, 0xb8, 0x1d, 0x03, 0x4a, 0x86, 0x30, 0x2c,
+	0x07, 0x94, 0x4b, 0xcb, 0x81, 0xcf, 0x55, 0xa8, 0x2d, 0x68, 0xb9, 0x4e, 0xba, 0x5e, 0x1b, 0xf4,
+	0x68, 0x2a, 0xd0, 0x96, 0x9e, 0x2b, 0x89, 0x55, 0xb7, 0x1d, 0xc9, 0x35, 0x03, 0x75, 0xe5, 0x4d,
+	0xd2, 0x81, 0x57, 0x2f, 0x04, 0x64, 0x03, 0x70, 0x7f, 0xa7, 0xc2, 0xde, 0x82, 0xae, 0x6b, 0xe7,
+	0xac, 0xe7, 0x82, 0x70, 0x3c, 0xd9, 0x26, 0x2e, 0xbd, 0x4d, 0xb8, 0x31, 0xb0, 0x1f, 0xc1, 0xfe,
+	0x72, 0x80, 0x36, 0x40, 0xfc, 0x4f, 0x2a, 0x7c, 0x35, 0xae, 0xf0, 0x3a, 0x2f, 0xf6, 0xcf, 0x05,
+	0xef, 0xc5, 0xb7, 0xf5, 0xc4, 0x06, 0x6f, 0xeb, 0x37, 0x86, 0xff, 0x43, 0xb8, 0xb7, 0x0c, 0xae,
+	0x0d, 0xd0, 0xff, 0x31, 0xe4, 0x0f, 0xc9, 0xd0, 0xb2, 0x37, 0xc3, 0x7a, 0xe1, 0x3b, 0x87, 0xba,
+	0xf8, 0x9d, 0x43, 0xff, 0x0e, 0x14, 0xa4, 0x6a, 0x69, 0x57, 0x24, 0x51, 0x2a, 0x97, 0x24, 0xca,
+	0xcf, 0x14, 0x28, 0xb4, 0xf9, 0xe7, 0x90, 0x1b, 0x2f, 0x14, 0xee, 0x40, 0xca, 0x64, 0xce, 0xc4,
+	0xea, 0xcb, 0x0f, 0x35, 0xb2, 0xa5, 0x97, 0xa1, 0xe8, 0x5b, 0x20, 0xec, 0xd7, 0x7f, 0x06, 0x25,
+	0xec, 0x8c, 0xc7, 0xa7, 0x66, 0x7f, 0x74, 0xd3, 0x56, 0xe9, 0x08, 0xca, 0xe1, 0x5a, 0x72, 0xfd,
+	0x4f, 0xe0, 0x15, 0x4c, 0xa8, 0x33, 0x9e, 0x93, 0x48, 0x49, 0xb1, 0x99, 0x25, 0x08, 0x12, 0x03,
+	0x26, 0xbf, 0xab, 0x64, 0x31, 0x7f, 0xd6, 0xff, 0xa6, 0x40, 0xe5, 0x98, 0x50, 0x6a, 0x0e, 0x89,
+	0x20, 0xd8, 0x66, 0xaa, 0x57, 0xd5, 0x8c, 0x15, 0x48, 0x8a, 0x93, 0x57, 0xec, 0x37, 0xd1, 0x40,
+	0x4d, 0xc8, 0x06, 0x9b, 0x8d, 0x9f, 0xc9, 0x17, 0xef, 0xb5, 0x8c, 0xbf, 0xd7, 0x3c, 0xeb, 0x23,
+	0xf7, 0x23, 0xfc, 0x59, 0xff, 0x95, 0x02, 0xb7, 0xa4, 0xf5, 0xef, 0x6f, 0x1a, 0x9f, 0x55, 0xa6,
+	0xfb, 0x6b, 0x6a, 0xe1, 0x9a, 0xe8, 0x1e, 0x68, 0x7e, 0x32, 0xce, 0xb5, 0xf2, 0x72, 0x97, 0x7d,
+	0x6c, 0x8e, 0x67, 0x04, 0x7b, 0x1d, 0xfa, 0x31, 0xe4, 0x3b, 0x91, 0x4a, 0x13, 0xed, 0x82, 0x1a,
+	0x98, 0xb1, 0x38, 0x5c, 0xb5, 0x06, 0xf1, 0x2b, 0x0a, 0xf5, 0xdc, 0x15, 0xc5, 0x5f, 0x15, 0xd8,
+	0x0d, 0x5d, 0xbc, 0xf6, 0xc1, 0x74, 0x55, 0x6f, 0xbf, 0x0b, 0x25, 0x6b, 0x60, 0x9c, 0x3b, 0x86,
+	0x72, 0xad, 0x8a, 0xcf, 0xe2, 0xa8, 0xb3, 0xb8, 0x60, 0x45, 0x5a, 0x54, 0xdf, 0x85, 0xda, 0x45,
+	0xe4, 0x95, 0xd4, 0xfe, 0x9f, 0x0a, 0xb7, 0xba, 0xd3, 0xb1, 0xc5, 0x64, 0x8e, 0x7a, 0xde, 0xfe,
+	0xac, 0x7d, 0x49, 0xf7, 0x1a, 0xe4, 0xa9, 0x67, 0x87, 0xbc, 0x87, 0x93, 0x05, 0x4d, 0x8e, 0xcb,
+	0xc4, 0x0d, 0x9c, 0x17, 0x27, 0x7f, 0xc8, 0xcc, 0x66, 0x9c, 0x84, 0x1a, 0x06, 0x39, 0x62, 0x66,
+	0x33, 0xf4, 0x0d, 0xb8, 0x6b, 0xcf, 0x26, 0x86, 0xeb, 0x3c, 0xa3, 0xc6, 0x94, 0xb8, 0x06, 0xd7,
+	0x6c, 0x4c, 0x4d, 0x97, 0xf1, 0x14, 0xaf, 0xe1, 0x1d, 0x7b, 0x36, 0xc1, 0xce, 0x33, 0x7a, 0x42,
+	0x5c, 0xbe, 0xf8, 0x89, 0xe9, 0x32, 0xf4, 0x7d, 0xc8, 0x9a, 0xe3, 0xa1, 0xe3, 0x5a, 0xec, 0xe9,
+	0x44, 0x5e, 0xbc, 0xe9, 0xd2, 0xcc, 0x73, 0xc8, 0x34, 0xde, 0xf7, 0x47, 0xe2, 0x70, 0x12, 0x7a,
+	0x1b, 0xd0, 0x8c, 0x12, 0x43, 0x18, 0x27, 0x16, 0x9d, 0xb7, 0xe4, 0x2d, 0x5c, 0x69, 0x46, 0x49,
+	0xa8, 0xe6, 0xe3, 0x96, 0xfe, 0x0f, 0x0d, 0x50, 0x54, 0xaf, 0xcc, 0xd1, 0xdf, 0x82, 0x14, 0x9f,
+	0x4f, 0xab, 0x0a, 0x8f, 0xed, 0x5e, 0x90, 0xa1, 0xce, 0x8d, 0x6d, 0x78, 0x66, 0x63, 0x39, 0xbc,
+	0xf6, 0x09, 0xe4, 0xfd, 0x9d, 0xca, 0xdd, 0x89, 0x46, 0x43, 0x59, 0x79, 0xba, 0xaa, 0x6b, 0x9c,
+	0xae, 0xb5, 0xef, 0x41, 0x96, 0x57, 0x75, 0x97, 0xea, 0x0e, 0x6b, 0x51, 0x35, 0x5a, 0x8b, 0xd6,
+	0xfe, 0xad, 0x40, 0x82, 0x4f, 0x5e, 0xfb, 0xe5, 0xf7, 0x98, 0xbf, 0x2f, 0x08, 0x2b, 0x45, 0xf4,
+	0x44, 0xd2, 0x7e, 0x63, 0x05, 0x24, 0x51, 0x08, 0x70, 0x7e, 0x14, 0x05, 0xa4, 0x0d, 0x20, 0xfe,
+	0x58, 0xc0, 0x55, 0x09, 0x1e, 0x7e, 0x6d, 0x85, 0xaa, 0xc0, 0x5d, 0x9c, 0xa5, 0x81, 0xe7, 0x08,
+	0x12, 0xd4, 0xfa, 0x85, 0xc8, 0x92, 0x1a, 0xe6, 0xcf, 0xfa, 0xbb, 0x70, 0xfb, 0x03, 0xc2, 0xba,
+	0xee, 0xdc, 0xdf, 0x6e, 0xfe, 0xf6, 0x59, 0x01, 0x93, 0x8e, 0xe1, 0x4e, 0x7c, 0x92, 0x64, 0xc0,
+	0xb7, 0x21, 0x4f, 0xdd, 0xb9, 0xb1, 0x30, 0xd3, 0xab, 0x4a, 0x82, 0xf0, 0x44, 0x27, 0xe5, 0x68,
+	0xd8, 0xd0, 0xff, 0xa0, 0xc2, 0xce, 0xe3, 0xe9, 0xc0, 0x64, 0xdb, 0x7e, 0x7e, 0x6c, 0x58, 0xaa,
+	0xed, 0x42, 0x96, 0x59, 0x13, 0x42, 0x99, 0x39, 0x99, 0xca, 0x9d, 0x1c, 0x0a, 0x3c, 0x5e, 0x91,
+	0x39, 0xb1, 0x99, 0xbc, 0x80, 0xf4, 0x79, 0x75, 0xe4, 0xc9, 0x7a, 0xce, 0x88, 0xd8, 0x58, 0xf4,
+	0xeb, 0x23, 0xa8, 0x2c, 0xa2, 0x24, 0x81, 0xaf, 0xfb, 0x0a, 0x16, 0xab, 0x36, 0x59, 0xec, 0x79,
+	0x3d, 0x52, 0x03, 0x7a, 0x13, 0xca, 0x5e, 0xf9, 0x36, 0x21, 0x46, 0x68, 0x8f, 0xf8, 0x87, 0x44,
+	0x49, 0xc8, 0x7b, 0xbe, 0xf8, 0xad, 0x07, 0x50, 0x8a, 0xfd, 0xad, 0x03, 0x95, 0x20, 0xf7, 0xf8,
+	0x51, 0xf7, 0xe4, 0xa8, 0xdd, 0xf9, 0x41, 0xe7, 0xe8, 0x41, 0xf9, 0x2b, 0x08, 0x20, 0xd5, 0xed,
+	0x3c, 0xfa, 0xe0, 0xe1, 0x51, 0x59, 0x41, 0x59, 0x48, 0x1e, 0x3f, 0x7e, 0xd8, 0xeb, 0x94, 0x55,
+	0xef, 0xb1, 0xf7, 0xe4, 0xa3, 0x93, 0x76, 0x59, 0x3b, 0x7c, 0x0f, 0x4a, 0x96, 0xd3, 0x98, 0x5b,
+	0x8c, 0x50, 0x2a, 0xfe, 0x5a, 0xf3, 0x93, 0xd7, 0x65, 0xcb, 0x72, 0x9a, 0xe2, 0xa9, 0x39, 0x74,
+	0x9a, 0x73, 0xd6, 0xe4, 0xbd, 0x4d, 0x41, 0xeb, 0xd3, 0x14, 0x6f, 0xbd, 0xfb, 0x65, 0x00, 0x00,
+	0x00, 0xff, 0xff, 0x52, 0xf0, 0x0f, 0xdd, 0xc8, 0x23, 0x00, 0x00,
 }

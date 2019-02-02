@@ -6,6 +6,7 @@ package queryservice // import "vitess.io/vitess/go/vt/proto/queryservice"
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import binlogdata "vitess.io/vitess/go/vt/proto/binlogdata"
 import query "vitess.io/vitess/go/vt/proto/query"
 
 import (
@@ -32,8 +33,9 @@ var _ grpc.ClientConn
 // is compatible with the grpc package it is being compiled against.
 const _ = grpc.SupportPackageIsVersion4
 
-// Client API for Query service
-
+// QueryClient is the client API for Query service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type QueryClient interface {
 	// Execute executes the specified SQL query (might be in a
 	// transaction context, if Query.transaction_id is set).
@@ -84,6 +86,8 @@ type QueryClient interface {
 	StreamHealth(ctx context.Context, in *query.StreamHealthRequest, opts ...grpc.CallOption) (Query_StreamHealthClient, error)
 	// UpdateStream asks the server to return a stream of the updates that have been applied to its database.
 	UpdateStream(ctx context.Context, in *query.UpdateStreamRequest, opts ...grpc.CallOption) (Query_UpdateStreamClient, error)
+	// VStream streams vreplication events.
+	VStream(ctx context.Context, in *binlogdata.VStreamRequest, opts ...grpc.CallOption) (Query_VStreamClient, error)
 }
 
 type queryClient struct {
@@ -96,7 +100,7 @@ func NewQueryClient(cc *grpc.ClientConn) QueryClient {
 
 func (c *queryClient) Execute(ctx context.Context, in *query.ExecuteRequest, opts ...grpc.CallOption) (*query.ExecuteResponse, error) {
 	out := new(query.ExecuteResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/Execute", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/Execute", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +109,7 @@ func (c *queryClient) Execute(ctx context.Context, in *query.ExecuteRequest, opt
 
 func (c *queryClient) ExecuteBatch(ctx context.Context, in *query.ExecuteBatchRequest, opts ...grpc.CallOption) (*query.ExecuteBatchResponse, error) {
 	out := new(query.ExecuteBatchResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/ExecuteBatch", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/ExecuteBatch", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +117,7 @@ func (c *queryClient) ExecuteBatch(ctx context.Context, in *query.ExecuteBatchRe
 }
 
 func (c *queryClient) StreamExecute(ctx context.Context, in *query.StreamExecuteRequest, opts ...grpc.CallOption) (Query_StreamExecuteClient, error) {
-	stream, err := grpc.NewClientStream(ctx, &_Query_serviceDesc.Streams[0], c.cc, "/queryservice.Query/StreamExecute", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Query_serviceDesc.Streams[0], "/queryservice.Query/StreamExecute", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +150,7 @@ func (x *queryStreamExecuteClient) Recv() (*query.StreamExecuteResponse, error) 
 
 func (c *queryClient) Begin(ctx context.Context, in *query.BeginRequest, opts ...grpc.CallOption) (*query.BeginResponse, error) {
 	out := new(query.BeginResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/Begin", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/Begin", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +159,7 @@ func (c *queryClient) Begin(ctx context.Context, in *query.BeginRequest, opts ..
 
 func (c *queryClient) Commit(ctx context.Context, in *query.CommitRequest, opts ...grpc.CallOption) (*query.CommitResponse, error) {
 	out := new(query.CommitResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/Commit", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/Commit", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +168,7 @@ func (c *queryClient) Commit(ctx context.Context, in *query.CommitRequest, opts 
 
 func (c *queryClient) Rollback(ctx context.Context, in *query.RollbackRequest, opts ...grpc.CallOption) (*query.RollbackResponse, error) {
 	out := new(query.RollbackResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/Rollback", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/Rollback", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +177,7 @@ func (c *queryClient) Rollback(ctx context.Context, in *query.RollbackRequest, o
 
 func (c *queryClient) Prepare(ctx context.Context, in *query.PrepareRequest, opts ...grpc.CallOption) (*query.PrepareResponse, error) {
 	out := new(query.PrepareResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/Prepare", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/Prepare", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +186,7 @@ func (c *queryClient) Prepare(ctx context.Context, in *query.PrepareRequest, opt
 
 func (c *queryClient) CommitPrepared(ctx context.Context, in *query.CommitPreparedRequest, opts ...grpc.CallOption) (*query.CommitPreparedResponse, error) {
 	out := new(query.CommitPreparedResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/CommitPrepared", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/CommitPrepared", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +195,7 @@ func (c *queryClient) CommitPrepared(ctx context.Context, in *query.CommitPrepar
 
 func (c *queryClient) RollbackPrepared(ctx context.Context, in *query.RollbackPreparedRequest, opts ...grpc.CallOption) (*query.RollbackPreparedResponse, error) {
 	out := new(query.RollbackPreparedResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/RollbackPrepared", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/RollbackPrepared", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +204,7 @@ func (c *queryClient) RollbackPrepared(ctx context.Context, in *query.RollbackPr
 
 func (c *queryClient) CreateTransaction(ctx context.Context, in *query.CreateTransactionRequest, opts ...grpc.CallOption) (*query.CreateTransactionResponse, error) {
 	out := new(query.CreateTransactionResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/CreateTransaction", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/CreateTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +213,7 @@ func (c *queryClient) CreateTransaction(ctx context.Context, in *query.CreateTra
 
 func (c *queryClient) StartCommit(ctx context.Context, in *query.StartCommitRequest, opts ...grpc.CallOption) (*query.StartCommitResponse, error) {
 	out := new(query.StartCommitResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/StartCommit", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/StartCommit", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +222,7 @@ func (c *queryClient) StartCommit(ctx context.Context, in *query.StartCommitRequ
 
 func (c *queryClient) SetRollback(ctx context.Context, in *query.SetRollbackRequest, opts ...grpc.CallOption) (*query.SetRollbackResponse, error) {
 	out := new(query.SetRollbackResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/SetRollback", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/SetRollback", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +231,7 @@ func (c *queryClient) SetRollback(ctx context.Context, in *query.SetRollbackRequ
 
 func (c *queryClient) ConcludeTransaction(ctx context.Context, in *query.ConcludeTransactionRequest, opts ...grpc.CallOption) (*query.ConcludeTransactionResponse, error) {
 	out := new(query.ConcludeTransactionResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/ConcludeTransaction", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/ConcludeTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +240,7 @@ func (c *queryClient) ConcludeTransaction(ctx context.Context, in *query.Conclud
 
 func (c *queryClient) ReadTransaction(ctx context.Context, in *query.ReadTransactionRequest, opts ...grpc.CallOption) (*query.ReadTransactionResponse, error) {
 	out := new(query.ReadTransactionResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/ReadTransaction", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/ReadTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +249,7 @@ func (c *queryClient) ReadTransaction(ctx context.Context, in *query.ReadTransac
 
 func (c *queryClient) BeginExecute(ctx context.Context, in *query.BeginExecuteRequest, opts ...grpc.CallOption) (*query.BeginExecuteResponse, error) {
 	out := new(query.BeginExecuteResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/BeginExecute", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/BeginExecute", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +258,7 @@ func (c *queryClient) BeginExecute(ctx context.Context, in *query.BeginExecuteRe
 
 func (c *queryClient) BeginExecuteBatch(ctx context.Context, in *query.BeginExecuteBatchRequest, opts ...grpc.CallOption) (*query.BeginExecuteBatchResponse, error) {
 	out := new(query.BeginExecuteBatchResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/BeginExecuteBatch", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/BeginExecuteBatch", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +266,7 @@ func (c *queryClient) BeginExecuteBatch(ctx context.Context, in *query.BeginExec
 }
 
 func (c *queryClient) MessageStream(ctx context.Context, in *query.MessageStreamRequest, opts ...grpc.CallOption) (Query_MessageStreamClient, error) {
-	stream, err := grpc.NewClientStream(ctx, &_Query_serviceDesc.Streams[1], c.cc, "/queryservice.Query/MessageStream", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Query_serviceDesc.Streams[1], "/queryservice.Query/MessageStream", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +299,7 @@ func (x *queryMessageStreamClient) Recv() (*query.MessageStreamResponse, error) 
 
 func (c *queryClient) MessageAck(ctx context.Context, in *query.MessageAckRequest, opts ...grpc.CallOption) (*query.MessageAckResponse, error) {
 	out := new(query.MessageAckResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/MessageAck", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/MessageAck", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +308,7 @@ func (c *queryClient) MessageAck(ctx context.Context, in *query.MessageAckReques
 
 func (c *queryClient) SplitQuery(ctx context.Context, in *query.SplitQueryRequest, opts ...grpc.CallOption) (*query.SplitQueryResponse, error) {
 	out := new(query.SplitQueryResponse)
-	err := grpc.Invoke(ctx, "/queryservice.Query/SplitQuery", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/queryservice.Query/SplitQuery", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +316,7 @@ func (c *queryClient) SplitQuery(ctx context.Context, in *query.SplitQueryReques
 }
 
 func (c *queryClient) StreamHealth(ctx context.Context, in *query.StreamHealthRequest, opts ...grpc.CallOption) (Query_StreamHealthClient, error) {
-	stream, err := grpc.NewClientStream(ctx, &_Query_serviceDesc.Streams[2], c.cc, "/queryservice.Query/StreamHealth", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Query_serviceDesc.Streams[2], "/queryservice.Query/StreamHealth", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +348,7 @@ func (x *queryStreamHealthClient) Recv() (*query.StreamHealthResponse, error) {
 }
 
 func (c *queryClient) UpdateStream(ctx context.Context, in *query.UpdateStreamRequest, opts ...grpc.CallOption) (Query_UpdateStreamClient, error) {
-	stream, err := grpc.NewClientStream(ctx, &_Query_serviceDesc.Streams[3], c.cc, "/queryservice.Query/UpdateStream", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Query_serviceDesc.Streams[3], "/queryservice.Query/UpdateStream", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -375,8 +379,39 @@ func (x *queryUpdateStreamClient) Recv() (*query.UpdateStreamResponse, error) {
 	return m, nil
 }
 
-// Server API for Query service
+func (c *queryClient) VStream(ctx context.Context, in *binlogdata.VStreamRequest, opts ...grpc.CallOption) (Query_VStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Query_serviceDesc.Streams[4], "/queryservice.Query/VStream", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &queryVStreamClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
 
+type Query_VStreamClient interface {
+	Recv() (*binlogdata.VStreamResponse, error)
+	grpc.ClientStream
+}
+
+type queryVStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *queryVStreamClient) Recv() (*binlogdata.VStreamResponse, error) {
+	m := new(binlogdata.VStreamResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// QueryServer is the server API for Query service.
 type QueryServer interface {
 	// Execute executes the specified SQL query (might be in a
 	// transaction context, if Query.transaction_id is set).
@@ -427,6 +462,8 @@ type QueryServer interface {
 	StreamHealth(*query.StreamHealthRequest, Query_StreamHealthServer) error
 	// UpdateStream asks the server to return a stream of the updates that have been applied to its database.
 	UpdateStream(*query.UpdateStreamRequest, Query_UpdateStreamServer) error
+	// VStream streams vreplication events.
+	VStream(*binlogdata.VStreamRequest, Query_VStreamServer) error
 }
 
 func RegisterQueryServer(s *grpc.Server, srv QueryServer) {
@@ -823,6 +860,27 @@ func (x *queryUpdateStreamServer) Send(m *query.UpdateStreamResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Query_VStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(binlogdata.VStreamRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(QueryServer).VStream(m, &queryVStreamServer{stream})
+}
+
+type Query_VStreamServer interface {
+	Send(*binlogdata.VStreamResponse) error
+	grpc.ServerStream
+}
+
+type queryVStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *queryVStreamServer) Send(m *binlogdata.VStreamResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 var _Query_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "queryservice.Query",
 	HandlerType: (*QueryServer)(nil),
@@ -917,45 +975,51 @@ var _Query_serviceDesc = grpc.ServiceDesc{
 			Handler:       _Query_UpdateStream_Handler,
 			ServerStreams: true,
 		},
+		{
+			StreamName:    "VStream",
+			Handler:       _Query_VStream_Handler,
+			ServerStreams: true,
+		},
 	},
 	Metadata: "queryservice.proto",
 }
 
-func init() { proto.RegisterFile("queryservice.proto", fileDescriptor_queryservice_81e549fbfb878a8d) }
+func init() { proto.RegisterFile("queryservice.proto", fileDescriptor_queryservice_17509881eb07629d) }
 
-var fileDescriptor_queryservice_81e549fbfb878a8d = []byte{
-	// 519 bytes of a gzipped FileDescriptorProto
+var fileDescriptor_queryservice_17509881eb07629d = []byte{
+	// 544 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x95, 0xdf, 0x6b, 0xd4, 0x40,
-	0x10, 0xc7, 0xf5, 0xa1, 0xad, 0x4c, 0xe3, 0xaf, 0xad, 0x55, 0x9b, 0xd6, 0xb6, 0xf6, 0x4d, 0x84,
-	0x46, 0x54, 0x10, 0x0a, 0x3e, 0xf4, 0x82, 0xa2, 0x14, 0x7f, 0xdd, 0x59, 0x10, 0x1f, 0x84, 0x6d,
-	0x6e, 0x38, 0x43, 0x73, 0x49, 0xba, 0xbb, 0x77, 0xe8, 0x5f, 0xe4, 0xbf, 0x29, 0x66, 0x33, 0x93,
-	0xdd, 0xbd, 0xc4, 0xb7, 0xce, 0xf7, 0x3b, 0xf3, 0x61, 0x6e, 0xa7, 0x33, 0x01, 0x71, 0xb5, 0x40,
-	0xf5, 0x5b, 0xa3, 0x5a, 0xe6, 0x19, 0x1e, 0xd7, 0xaa, 0x32, 0x95, 0x88, 0x5c, 0x2d, 0xde, 0x6c,
-	0x22, 0x6b, 0x3d, 0xff, 0x13, 0xc1, 0xda, 0x97, 0x7f, 0xb1, 0x38, 0x81, 0x8d, 0x37, 0xbf, 0x30,
-	0x5b, 0x18, 0x14, 0xdb, 0xc7, 0x36, 0xa5, 0x8d, 0xc7, 0x78, 0xb5, 0x40, 0x6d, 0xe2, 0xfb, 0xa1,
-	0xac, 0xeb, 0xaa, 0xd4, 0x78, 0x74, 0x4d, 0xbc, 0x87, 0xa8, 0x15, 0x47, 0xd2, 0x64, 0x3f, 0x45,
-	0xec, 0x67, 0x36, 0x22, 0x51, 0x76, 0x7b, 0x3d, 0x46, 0x7d, 0x84, 0x9b, 0x13, 0xa3, 0x50, 0xce,
-	0xa9, 0x19, 0xca, 0xf7, 0x54, 0x82, 0xed, 0xf5, 0x9b, 0x44, 0x7b, 0x76, 0x5d, 0xbc, 0x84, 0xb5,
-	0x11, 0xce, 0xf2, 0x52, 0x6c, 0xb5, 0xa9, 0x4d, 0x44, 0xf5, 0xf7, 0x7c, 0x91, 0xbb, 0x78, 0x05,
-	0xeb, 0x69, 0x35, 0x9f, 0xe7, 0x46, 0x50, 0x86, 0x0d, 0xa9, 0x6e, 0x3b, 0x50, 0xb9, 0xf0, 0x35,
-	0xdc, 0x18, 0x57, 0x45, 0x71, 0x21, 0xb3, 0x4b, 0x41, 0xef, 0x45, 0x02, 0x15, 0x3f, 0x58, 0xd1,
-	0xb9, 0xfc, 0x04, 0x36, 0x3e, 0x2b, 0xac, 0xa5, 0xea, 0x86, 0xd0, 0xc6, 0xe1, 0x10, 0x58, 0xe6,
-	0xda, 0x4f, 0x70, 0xcb, 0xb6, 0xd3, 0x5a, 0x53, 0xb1, 0xe7, 0x75, 0x49, 0x32, 0x91, 0x1e, 0x0d,
-	0xb8, 0x0c, 0x3c, 0x87, 0x3b, 0xd4, 0x22, 0x23, 0xf7, 0x83, 0xde, 0x43, 0xe8, 0xc1, 0xa0, 0xcf,
-	0xd8, 0x6f, 0x70, 0x37, 0x55, 0x28, 0x0d, 0x7e, 0x55, 0xb2, 0xd4, 0x32, 0x33, 0x79, 0x55, 0x0a,
-	0xaa, 0x5b, 0x71, 0x08, 0x7c, 0x38, 0x9c, 0xc0, 0xe4, 0xb7, 0xb0, 0x39, 0x31, 0x52, 0x99, 0x76,
-	0x74, 0x3b, 0xfc, 0xcf, 0xc1, 0x1a, 0xd1, 0xe2, 0x3e, 0xcb, 0xe3, 0xa0, 0xe1, 0x39, 0x32, 0xa7,
-	0xd3, 0x56, 0x38, 0xae, 0xc5, 0x9c, 0x1f, 0xb0, 0x95, 0x56, 0x65, 0x56, 0x2c, 0xa6, 0xde, 0x6f,
-	0x7d, 0xcc, 0x0f, 0xbf, 0xe2, 0x11, 0xf7, 0xe8, 0x7f, 0x29, 0xcc, 0x1f, 0xc3, 0xed, 0x31, 0xca,
-	0xa9, 0xcb, 0xa6, 0xa1, 0x06, 0x3a, 0x71, 0xf7, 0x87, 0x6c, 0x77, 0x95, 0x9b, 0x65, 0xa0, 0xf5,
-	0x8b, 0xdd, 0x0d, 0x09, 0xb6, 0x6f, 0xb7, 0xd7, 0x73, 0x07, 0xed, 0x3a, 0xf6, 0x34, 0x1c, 0xf4,
-	0xd4, 0x78, 0xf7, 0xe1, 0x70, 0x38, 0xc1, 0x3d, 0x12, 0x1f, 0x50, 0x6b, 0x39, 0x43, 0xbb, 0xf8,
-	0x7c, 0x24, 0x3c, 0x35, 0x3c, 0x12, 0x81, 0xe9, 0x1c, 0x89, 0x14, 0xa0, 0x35, 0x4f, 0xb3, 0x4b,
-	0xf1, 0xd0, 0xcf, 0x3f, 0xed, 0xc6, 0xbd, 0xd3, 0xe3, 0x70, 0x53, 0x29, 0xc0, 0xa4, 0x2e, 0x72,
-	0x63, 0xcf, 0x29, 0x41, 0x3a, 0x29, 0x84, 0xb8, 0x0e, 0x43, 0xce, 0x20, 0xb2, 0xfd, 0xbd, 0x43,
-	0x59, 0x98, 0xee, 0x92, 0xba, 0x62, 0xf8, 0xfc, 0xbe, 0xe7, 0xfc, 0xac, 0x33, 0x88, 0xce, 0xeb,
-	0xa9, 0x34, 0xf4, 0x4a, 0x04, 0x73, 0xc5, 0x10, 0xe6, 0x7b, 0x1d, 0x6c, 0xf4, 0xf4, 0xfb, 0x93,
-	0x65, 0x6e, 0x50, 0xeb, 0xe3, 0xbc, 0x4a, 0xec, 0x5f, 0xc9, 0xac, 0x4a, 0x96, 0x26, 0x69, 0xbe,
-	0x24, 0x89, 0xfb, 0x8d, 0xb9, 0x58, 0x6f, 0xb4, 0x17, 0x7f, 0x03, 0x00, 0x00, 0xff, 0xff, 0x51,
-	0x5a, 0xbc, 0xc0, 0x8e, 0x06, 0x00, 0x00,
+	0x10, 0xc7, 0xf5, 0xa1, 0xad, 0x4c, 0x4f, 0xad, 0x5b, 0xab, 0x36, 0xad, 0x6d, 0xed, 0x9b, 0x08,
+	0x17, 0x51, 0x41, 0x28, 0xf8, 0xd0, 0x0b, 0x16, 0xa5, 0xf8, 0xeb, 0xce, 0x16, 0xf1, 0x41, 0xd8,
+	0x4b, 0x86, 0x33, 0x34, 0x97, 0x4d, 0x93, 0xbd, 0x43, 0xff, 0x6a, 0xff, 0x05, 0x31, 0x9b, 0x99,
+	0xec, 0xee, 0x25, 0xbe, 0xdd, 0x7e, 0xbf, 0x33, 0x1f, 0x26, 0x3b, 0x37, 0xb3, 0x20, 0xae, 0x17,
+	0x58, 0xfe, 0xae, 0xb0, 0x5c, 0xa6, 0x31, 0x0e, 0x8b, 0x52, 0x69, 0x25, 0x06, 0xb6, 0x16, 0x6c,
+	0xd6, 0x27, 0x63, 0x05, 0x5b, 0xd3, 0x34, 0xcf, 0xd4, 0x2c, 0x91, 0x5a, 0x1a, 0xe5, 0xc5, 0x9f,
+	0x01, 0xac, 0x7d, 0xf9, 0x17, 0x21, 0x4e, 0x60, 0xe3, 0xed, 0x2f, 0x8c, 0x17, 0x1a, 0xc5, 0xce,
+	0xd0, 0x24, 0x35, 0xe7, 0x31, 0x5e, 0x2f, 0xb0, 0xd2, 0xc1, 0x03, 0x5f, 0xae, 0x0a, 0x95, 0x57,
+	0x78, 0x7c, 0x43, 0xbc, 0x87, 0x41, 0x23, 0x8e, 0xa4, 0x8e, 0x7f, 0x8a, 0xc0, 0x8d, 0xac, 0x45,
+	0xa2, 0xec, 0x75, 0x7a, 0x8c, 0xfa, 0x08, 0xb7, 0x27, 0xba, 0x44, 0x39, 0xa7, 0x62, 0x28, 0xde,
+	0x51, 0x09, 0xb6, 0xdf, 0x6d, 0x12, 0xed, 0xf9, 0x4d, 0xf1, 0x0a, 0xd6, 0x46, 0x38, 0x4b, 0x73,
+	0xb1, 0xdd, 0x84, 0xd6, 0x27, 0xca, 0xbf, 0xef, 0x8a, 0x5c, 0xc5, 0x6b, 0x58, 0x8f, 0xd4, 0x7c,
+	0x9e, 0x6a, 0x41, 0x11, 0xe6, 0x48, 0x79, 0x3b, 0x9e, 0xca, 0x89, 0x6f, 0xe0, 0xd6, 0x58, 0x65,
+	0xd9, 0x54, 0xc6, 0x57, 0x82, 0xee, 0x8b, 0x04, 0x4a, 0x7e, 0xb8, 0xa2, 0x73, 0xfa, 0x09, 0x6c,
+	0x7c, 0x2e, 0xb1, 0x90, 0x65, 0xdb, 0x84, 0xe6, 0xec, 0x37, 0x81, 0x65, 0xce, 0xfd, 0x04, 0x77,
+	0x4c, 0x39, 0x8d, 0x95, 0x88, 0x7d, 0xa7, 0x4a, 0x92, 0x89, 0xf4, 0xb8, 0xc7, 0x65, 0xe0, 0x05,
+	0x6c, 0x51, 0x89, 0x8c, 0x3c, 0xf0, 0x6a, 0xf7, 0xa1, 0x87, 0xbd, 0x3e, 0x63, 0xbf, 0xc1, 0xbd,
+	0xa8, 0x44, 0xa9, 0xf1, 0x6b, 0x29, 0xf3, 0x4a, 0xc6, 0x3a, 0x55, 0xb9, 0xa0, 0xbc, 0x15, 0x87,
+	0xc0, 0x47, 0xfd, 0x01, 0x4c, 0x3e, 0x83, 0xcd, 0x89, 0x96, 0xa5, 0x6e, 0x5a, 0xb7, 0xcb, 0x7f,
+	0x0e, 0xd6, 0x88, 0x16, 0x74, 0x59, 0x0e, 0x07, 0x35, 0xf7, 0x91, 0x39, 0xad, 0xb6, 0xc2, 0xb1,
+	0x2d, 0xe6, 0xfc, 0x80, 0xed, 0x48, 0xe5, 0x71, 0xb6, 0x48, 0x9c, 0x6f, 0x7d, 0xc2, 0x17, 0xbf,
+	0xe2, 0x11, 0xf7, 0xf8, 0x7f, 0x21, 0xcc, 0x1f, 0xc3, 0xdd, 0x31, 0xca, 0xc4, 0x66, 0x53, 0x53,
+	0x3d, 0x9d, 0xb8, 0x07, 0x7d, 0xb6, 0x3d, 0xca, 0xf5, 0x30, 0xd0, 0xf8, 0x05, 0xf6, 0x84, 0x78,
+	0xd3, 0xb7, 0xd7, 0xe9, 0xd9, 0x8d, 0xb6, 0x1d, 0xb3, 0x1a, 0x0e, 0x3b, 0x72, 0x9c, 0xfd, 0x70,
+	0xd4, 0x1f, 0x60, 0x2f, 0x89, 0x0f, 0x58, 0x55, 0x72, 0x86, 0x66, 0xf0, 0x79, 0x49, 0x38, 0xaa,
+	0xbf, 0x24, 0x3c, 0xd3, 0x5a, 0x12, 0x11, 0x40, 0x63, 0x9e, 0xc6, 0x57, 0xe2, 0x91, 0x1b, 0x7f,
+	0xda, 0xb6, 0x7b, 0xb7, 0xc3, 0xe1, 0xa2, 0x22, 0x80, 0x49, 0x91, 0xa5, 0xda, 0xac, 0x53, 0x82,
+	0xb4, 0x92, 0x0f, 0xb1, 0x1d, 0x86, 0x9c, 0xc3, 0xc0, 0xd4, 0xf7, 0x0e, 0x65, 0xa6, 0xdb, 0x4d,
+	0x6a, 0x8b, 0xfe, 0xf5, 0xbb, 0x9e, 0xf5, 0x59, 0xe7, 0x30, 0xb8, 0x28, 0x12, 0xa9, 0xe9, 0x96,
+	0x08, 0x66, 0x8b, 0x3e, 0xcc, 0xf5, 0x2c, 0xd8, 0x19, 0x6c, 0x5c, 0x32, 0xc7, 0x7a, 0x47, 0x2e,
+	0x7d, 0x4e, 0x97, 0xd7, 0x72, 0x46, 0xcf, 0xbe, 0x3f, 0x5d, 0xa6, 0x1a, 0xab, 0x6a, 0x98, 0xaa,
+	0xd0, 0xfc, 0x0a, 0x67, 0x2a, 0x5c, 0xea, 0xb0, 0x7e, 0x91, 0x42, 0xfb, 0xf5, 0x9a, 0xae, 0xd7,
+	0xda, 0xcb, 0xbf, 0x01, 0x00, 0x00, 0xff, 0xff, 0xbd, 0x47, 0x8e, 0x80, 0xe8, 0x06, 0x00, 0x00,
 }

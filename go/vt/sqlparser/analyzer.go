@@ -31,6 +31,7 @@ import (
 )
 
 // These constants are used to identify the SQL statement type.
+// Changing this list will require reviewing all calls to Preview.
 const (
 	StmtSelect = iota
 	StmtStream
@@ -91,7 +92,7 @@ func Preview(sql string) int {
 		return StmtRollback
 	}
 	switch loweredFirstWord {
-	case "create", "alter", "rename", "drop", "truncate":
+	case "create", "alter", "rename", "drop", "truncate", "flush":
 		return StmtDDL
 	case "set":
 		return StmtSet

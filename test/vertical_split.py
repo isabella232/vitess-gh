@@ -424,6 +424,24 @@ msg varchar(64)
                         'destination_keyspace/0'],
                        auto_log=True)
 
+    # test Cancel first
+    utils.run_vtctl(['CancelResharding', 'destination_keyspace/0'], auto_log=True)
+    self.check_no_binlog_player(destination_master)
+    # master should be in serving state after cancel
+    utils.check_tablet_query_service(self, destination_master, True, False)
+
+    # redo VerticalSplitClone
+    utils.run_vtworker(['--cell', 'test_nj',
+                        '--command_display_interval', '10ms',
+                        '--use_v3_resharding_mode=false',
+                        'VerticalSplitClone',
+                        '--tables', '/moving/,view1',
+                        '--chunk_count', '10',
+                        '--min_rows_per_chunk', '1',
+                        '--min_healthy_rdonly_tablets', '1',
+                        'destination_keyspace/0'],
+                       auto_log=True)
+
     # check values are present
     self._check_values(destination_master, 'vt_destination_keyspace', 'moving1',
                        self.moving1_first, 100)
@@ -573,6 +591,10 @@ msg varchar(64)
     self._check_client_conn_redirection(
         'destination_keyspace',
         ['master'], ['moving1', 'moving2'])
+
+    # Cancel should fail now
+    utils.run_vtctl(['CancelResharding', 'destination_keyspace/0'],
+                    auto_log=True, expect_fail=True)
 
     # then serve master from the destination shards
     utils.run_vtctl(['MigrateServedFrom', 'destination_keyspace/0', 'master'],

@@ -20,6 +20,8 @@ import (
 	"errors"
 	"fmt"
 
+	"vitess.io/vitess/go/vt/vterrors"
+
 	"vitess.io/vitess/go/sqltypes"
 
 	"vitess.io/vitess/go/vt/key"
@@ -80,7 +82,7 @@ func (r *v2Resolver) keyspaceID(row []sqltypes.Value) ([]byte, error) {
 	case topodatapb.KeyspaceIdType_UINT64:
 		i, err := sqltypes.ToUint64(v)
 		if err != nil {
-			return nil, fmt.Errorf("Non numerical value: %v", err)
+			return nil, vterrors.Wrap(err, "Non numerical value")
 		}
 		return key.Uint64Key(i).Bytes(), nil
 	default:
@@ -105,18 +107,10 @@ func newV3ResolverFromTableDefinition(keyspaceSchema *vindexes.KeyspaceSchema, t
 	if !ok {
 		return nil, fmt.Errorf("no vschema definition for table %v", td.Name)
 	}
-	// the primary vindex is most likely the sharding key, and has to
-	// be unique.
-	if len(tableSchema.ColumnVindexes) == 0 {
-		return nil, fmt.Errorf("no vindex definition for table %v", td.Name)
-	}
-	colVindex := tableSchema.ColumnVindexes[0]
-	if colVindex.Vindex.Cost() > 1 {
-		return nil, fmt.Errorf("primary vindex cost is too high for table %v", td.Name)
-	}
-	if !colVindex.Vindex.IsUnique() {
-		// This is impossible, but just checking anyway.
-		return nil, fmt.Errorf("primary vindex is not unique for table %v", td.Name)
+	// use the lowest cost unique vindex as the sharding key
+	colVindex, err := vindexes.FindVindexForSharding(td.Name, tableSchema.ColumnVindexes)
+	if err != nil {
+		return nil, err
 	}
 
 	// Find the sharding key column index.
@@ -137,18 +131,10 @@ func newV3ResolverFromColumnList(keyspaceSchema *vindexes.KeyspaceSchema, name s
 	if !ok {
 		return nil, fmt.Errorf("no vschema definition for table %v", name)
 	}
-	// the primary vindex is most likely the sharding key, and has to
-	// be unique.
-	if len(tableSchema.ColumnVindexes) == 0 {
-		return nil, fmt.Errorf("no vindex definition for table %v", name)
-	}
-	colVindex := tableSchema.ColumnVindexes[0]
-	if colVindex.Vindex.Cost() > 1 {
-		return nil, fmt.Errorf("primary vindex cost is too high for table %v", name)
-	}
-	if !colVindex.Vindex.IsUnique() {
-		// This is impossible, but just checking anyway.
-		return nil, fmt.Errorf("primary vindex is not unique for table %v", name)
+	// use the lowest cost unique vindex as the sharding key
+	colVindex, err := vindexes.FindVindexForSharding(name, tableSchema.ColumnVindexes)
+	if err != nil {
+		return nil, err
 	}
 
 	// Find the sharding key column index.

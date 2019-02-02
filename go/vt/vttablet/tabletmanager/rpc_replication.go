@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	"vitess.io/vitess/go/vt/vterrors"
+
 	"golang.org/x/net/context"
 
 	"vitess.io/vitess/go/mysql"
@@ -140,6 +142,25 @@ func (agent *ActionAgent) StartSlave(ctx context.Context) error {
 		return err
 	}
 	return agent.MysqlDaemon.StartSlave(agent.hookExtraEnv())
+}
+
+// StartSlaveUntilAfter will start the replication and let it catch up
+// until and including the transactions in `position`
+func (agent *ActionAgent) StartSlaveUntilAfter(ctx context.Context, position string, waitTime time.Duration) error {
+	if err := agent.lock(ctx); err != nil {
+		return err
+	}
+	defer agent.unlock()
+
+	waitCtx, cancel := context.WithTimeout(ctx, waitTime)
+	defer cancel()
+
+	pos, err := mysql.DecodePosition(position)
+	if err != nil {
+		return err
+	}
+
+	return agent.MysqlDaemon.StartSlaveUntilAfter(waitCtx, pos)
 }
 
 // GetSlaves returns the address of all the slaves
@@ -305,7 +326,7 @@ func (agent *ActionAgent) DemoteMaster(ctx context.Context) (string, error) {
 	// let vtgate keep serving read traffic from this master (see comment below).
 	log.Infof("DemoteMaster disabling query service")
 	if _ /* state changed */, err := agent.QueryServiceControl.SetServingType(tablet.Type, false, nil); err != nil {
-		return "", fmt.Errorf("SetServingType(serving=false) failed: %v", err)
+		return "", vterrors.Wrap(err, "SetServingType(serving=false) failed")
 	}
 
 	// Now, set the server read-only. Note all active connections are not
@@ -539,19 +560,19 @@ func (agent *ActionAgent) StopReplicationAndGetStatus(ctx context.Context) (*rep
 	// get the status before we stop replication
 	rs, err := agent.MysqlDaemon.SlaveStatus()
 	if err != nil {
-		return nil, fmt.Errorf("before status failed: %v", err)
+		return nil, vterrors.Wrap(err, "before status failed")
 	}
 	if !rs.SlaveIORunning && !rs.SlaveSQLRunning {
 		// no replication is running, just return what we got
 		return mysql.SlaveStatusToProto(rs), nil
 	}
 	if err := agent.stopSlaveLocked(ctx); err != nil {
-		return nil, fmt.Errorf("stop slave failed: %v", err)
+		return nil, vterrors.Wrap(err, "stop slave failed")
 	}
 	// now patch in the current position
 	rs.Position, err = agent.MysqlDaemon.MasterPosition()
 	if err != nil {
-		return nil, fmt.Errorf("after position failed: %v", err)
+		return nil, vterrors.Wrap(err, "after position failed")
 	}
 	return mysql.SlaveStatusToProto(rs), nil
 }
@@ -631,7 +652,7 @@ func (agent *ActionAgent) fixSemiSyncAndReplication(tabletType topodatapb.Tablet
 	}
 
 	if err := agent.fixSemiSync(tabletType); err != nil {
-		return fmt.Errorf("failed to fixSemiSync(%v): %v", tabletType, err)
+		return vterrors.Wrapf(err, "failed to fixSemiSync(%v)", tabletType)
 	}
 
 	// If replication is running, but the status is wrong,
@@ -650,7 +671,7 @@ func (agent *ActionAgent) fixSemiSyncAndReplication(tabletType topodatapb.Tablet
 	shouldAck := isMasterEligible(tabletType)
 	acking, err := agent.MysqlDaemon.SemiSyncSlaveStatus()
 	if err != nil {
-		return fmt.Errorf("failed to get SemiSyncSlaveStatus: %v", err)
+		return vterrors.Wrap(err, "failed to get SemiSyncSlaveStatus")
 	}
 	if shouldAck == acking {
 		return nil
@@ -659,10 +680,10 @@ func (agent *ActionAgent) fixSemiSyncAndReplication(tabletType topodatapb.Tablet
 	// We need to restart replication
 	log.Infof("Restarting replication for semi-sync flag change to take effect from %v to %v", acking, shouldAck)
 	if err := agent.MysqlDaemon.StopSlave(agent.hookExtraEnv()); err != nil {
-		return fmt.Errorf("failed to StopSlave: %v", err)
+		return vterrors.Wrap(err, "failed to StopSlave")
 	}
 	if err := agent.MysqlDaemon.StartSlave(agent.hookExtraEnv()); err != nil {
-		return fmt.Errorf("failed to StartSlave: %v", err)
+		return vterrors.Wrap(err, "failed to StartSlave")
 	}
 	return nil
 }

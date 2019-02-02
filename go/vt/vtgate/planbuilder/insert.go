@@ -34,8 +34,11 @@ func buildInsertPlan(ins *sqlparser.Insert, vschema ContextVSchema) (*engine.Ins
 	if err := pb.processAliasedTable(aliased); err != nil {
 		return nil, err
 	}
-	// route is guaranteed because of simple table expr.
-	rb := pb.bldr.(*route)
+	rb, ok := pb.bldr.(*route)
+	if !ok {
+		// This can happen only for vindexes right now.
+		return nil, fmt.Errorf("inserting into a vindex not allowed: %s", sqlparser.String(ins.Table))
+	}
 	if rb.ERoute.TargetDestination != nil {
 		return nil, errors.New("unsupported: INSERT with a target destination")
 	}
@@ -56,11 +59,11 @@ func buildInsertPlan(ins *sqlparser.Insert, vschema ContextVSchema) (*engine.Ins
 }
 
 func buildInsertUnshardedPlan(ins *sqlparser.Insert, table *vindexes.Table, vschema ContextVSchema) (*engine.Insert, error) {
-	eins := &engine.Insert{
-		Opcode:   engine.InsertUnsharded,
-		Table:    table,
-		Keyspace: table.Keyspace,
-	}
+	eins := engine.NewSimpleInsert(
+		engine.InsertUnsharded,
+		table,
+		table.Keyspace,
+	)
 	var rows sqlparser.Values
 	switch insertValues := ins.Rows.(type) {
 	case *sqlparser.Select, *sqlparser.Union:
@@ -96,11 +99,11 @@ func buildInsertUnshardedPlan(ins *sqlparser.Insert, table *vindexes.Table, vsch
 }
 
 func buildInsertShardedPlan(ins *sqlparser.Insert, table *vindexes.Table) (*engine.Insert, error) {
-	eins := &engine.Insert{
-		Opcode:   engine.InsertSharded,
-		Table:    table,
-		Keyspace: table.Keyspace,
-	}
+	eins := engine.NewSimpleInsert(
+		engine.InsertSharded,
+		table,
+		table.Keyspace,
+	)
 	if ins.Ignore != "" {
 		eins.Opcode = engine.InsertShardedIgnore
 	}
@@ -203,7 +206,7 @@ func modifyForAutoinc(ins *sqlparser.Insert, eins *engine.Insert) error {
 	return nil
 }
 
-// swapBindVariables swaps in bind variable names at the the specified
+// swapBindVariables swaps in bind variable names at the specified
 // column position in the AST values and returns the converted values back.
 // Bind variable names are generated using baseName.
 func swapBindVariables(rows sqlparser.Values, colNum int, baseName string) (sqltypes.PlanValue, error) {

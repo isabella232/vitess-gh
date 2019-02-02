@@ -116,10 +116,12 @@ func TestMigrateServedTypes(t *testing.T) {
 	// sourceMaster will see the refresh, and has to respond to it
 	// also will be asked about its replication position.
 	sourceMaster.FakeMysqlDaemon.CurrentMasterPosition = mysql.Position{
-		GTIDSet: mysql.MariadbGTID{
-			Domain:   5,
-			Server:   456,
-			Sequence: 892,
+		GTIDSet: mysql.MariadbGTIDSet{
+			mysql.MariadbGTID{
+				Domain:   5,
+				Server:   456,
+				Sequence: 892,
+			},
 		},
 	}
 	sourceMaster.StartActionLoop(t, wr)
@@ -145,10 +147,13 @@ func TestMigrateServedTypes(t *testing.T) {
 	if err := dest1Master.Agent.VREngine.Open(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	// select pos from _vt.vreplication
-	dbClient1.ExpectRequest("select pos from _vt.vreplication where id=1", &sqltypes.Result{Rows: [][]sqltypes.Value{{
+	// select pos, state, message from _vt.vreplication
+	dbClient1.ExpectRequest("select pos, state, message from _vt.vreplication where id=1", &sqltypes.Result{Rows: [][]sqltypes.Value{{
 		sqltypes.NewVarBinary("MariaDB/5-456-892"),
+		sqltypes.NewVarBinary("Running"),
+		sqltypes.NewVarBinary(""),
 	}}}, nil)
+	dbClient1.ExpectRequest("use _vt", &sqltypes.Result{}, nil)
 	dbClient1.ExpectRequest("delete from _vt.vreplication where id = 1", &sqltypes.Result{RowsAffected: 1}, nil)
 
 	// dest2Rdonly will see the refresh
@@ -171,10 +176,13 @@ func TestMigrateServedTypes(t *testing.T) {
 	if err := dest2Master.Agent.VREngine.Open(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	// select pos from _vt.vreplication
-	dbClient2.ExpectRequest("select pos from _vt.vreplication where id=1", &sqltypes.Result{Rows: [][]sqltypes.Value{{
+	// select pos, state, message from _vt.vreplication
+	dbClient2.ExpectRequest("select pos, state, message from _vt.vreplication where id=1", &sqltypes.Result{Rows: [][]sqltypes.Value{{
 		sqltypes.NewVarBinary("MariaDB/5-456-892"),
+		sqltypes.NewVarBinary("Running"),
+		sqltypes.NewVarBinary(""),
 	}}}, nil)
+	dbClient2.ExpectRequest("use _vt", &sqltypes.Result{}, nil)
 	dbClient2.ExpectRequest("delete from _vt.vreplication where id = 1", &sqltypes.Result{RowsAffected: 1}, nil)
 
 	// migrate will error if the overlapping shards have no "SourceShard" entry

@@ -137,6 +137,9 @@ mkdir -p /tmp/mavencache
 chmod 777 /tmp/mavencache
 args="$args -v /tmp/mavencache:/home/vitess/.m2"
 
+# Add in the vitess user
+args="$args --user vitess"
+
 # Mount in host VTDATAROOT if one exists, since it might be a RAM disk or SSD.
 if [[ -n "$VTDATAROOT" ]]; then
   hostdir=`mktemp -d $VTDATAROOT/test-XXX`
@@ -201,9 +204,9 @@ fi
 # Clean up host dir mounted VTDATAROOT
 if [[ -n "$hostdir" ]]; then
   # Use Docker user to clean up first, to avoid permission errors.
-  docker run --name=rm_$testid -v $hostdir:/vt/vtdataroot $image bash -c 'rm -rf /vt/vtdataroot/*'
+  #docker run --name=rm_$testid -v $hostdir:/vt/vtdataroot $image bash -c 'rm -rf /vt/vtdataroot/*'
   docker rm -f rm_$testid &>/dev/null
-  rm -rf $hostdir
+  #rm -rf $hostdir
 fi
 
 # If requested, create the cache image.

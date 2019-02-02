@@ -132,7 +132,7 @@ func (stc *ScatterConn) Execute(
 	var mu sync.Mutex
 	qr := new(sqltypes.Result)
 
-	err := stc.multiGoTransaction(
+	allErrors := stc.multiGoTransaction(
 		ctx,
 		"Execute",
 		rss,
@@ -160,11 +160,16 @@ func (stc *ScatterConn) Execute(
 			qr.AppendResult(innerqr)
 			return transactionID, nil
 		})
-	return qr, err
+
+	return qr, allErrors.AggrError(vterrors.Aggregate)
 }
 
 // ExecuteMultiShard is like Execute,
 // but each shard gets its own Sql Queries and BindVariables.
+//
+// It always returns a non-nil query result and an array of
+// shard errors which may be nil so that callers can optionally
+// process a partially-successful operation.
 func (stc *ScatterConn) ExecuteMultiShard(
 	ctx context.Context,
 	rss []*srvtopo.ResolvedShard,
@@ -173,13 +178,13 @@ func (stc *ScatterConn) ExecuteMultiShard(
 	session *SafeSession,
 	notInTransaction bool,
 	autocommit bool,
-) (*sqltypes.Result, error) {
+) (qr *sqltypes.Result, errs []error) {
 
 	// mu protects qr
 	var mu sync.Mutex
-	qr := new(sqltypes.Result)
+	qr = new(sqltypes.Result)
 
-	err := stc.multiGoTransaction(
+	allErrors := stc.multiGoTransaction(
 		ctx,
 		"Execute",
 		rss,
@@ -213,7 +218,8 @@ func (stc *ScatterConn) ExecuteMultiShard(
 			qr.AppendResult(innerqr)
 			return transactionID, nil
 		})
-	return qr, err
+
+	return qr, allErrors.GetErrors()
 }
 
 func (stc *ScatterConn) executeAutocommit(ctx context.Context, rs *srvtopo.ResolvedShard, sql string, bindVariables map[string]*querypb.BindVariable, options *querypb.ExecuteOptions) (*sqltypes.Result, error) {
@@ -246,7 +252,7 @@ func (stc *ScatterConn) ExecuteEntityIds(
 	var mu sync.Mutex
 	qr := new(sqltypes.Result)
 
-	err := stc.multiGoTransaction(
+	allErrors := stc.multiGoTransaction(
 		ctx,
 		"ExecuteEntityIds",
 		rss,
@@ -271,7 +277,8 @@ func (stc *ScatterConn) ExecuteEntityIds(
 			qr.AppendResult(innerqr)
 			return transactionID, nil
 		})
-	return qr, err
+
+	return qr, allErrors.AggrError(vterrors.Aggregate)
 }
 
 // scatterBatchRequest needs to be built to perform a scatter batch query.
@@ -359,6 +366,7 @@ func (stc *ScatterConn) ExecuteBatch(
 	asTransaction bool,
 	session *SafeSession,
 	options *querypb.ExecuteOptions) (qrs []sqltypes.Result, err error) {
+
 	allErrors := new(concurrency.AllErrorRecorder)
 
 	results := make([]sqltypes.Result, batchRequest.length)
@@ -450,7 +458,7 @@ func (stc *ScatterConn) StreamExecute(
 	fieldSent := false
 
 	allErrors := stc.multiGo(ctx, "StreamExecute", rss, tabletType, func(rs *srvtopo.ResolvedShard, i int) error {
-		return rs.QueryService.StreamExecute(ctx, rs.Target, query, bindVars, options, func(qr *sqltypes.Result) error {
+		return rs.QueryService.StreamExecute(ctx, rs.Target, query, bindVars, 0, options, func(qr *sqltypes.Result) error {
 			return stc.processOneStreamingResult(&mu, &fieldSent, qr, callback)
 		})
 	})
@@ -476,7 +484,7 @@ func (stc *ScatterConn) StreamExecuteMulti(
 	fieldSent := false
 
 	allErrors := stc.multiGo(ctx, "StreamExecute", rss, tabletType, func(rs *srvtopo.ResolvedShard, i int) error {
-		return rs.QueryService.StreamExecute(ctx, rs.Target, query, bindVars[i], options, func(qr *sqltypes.Result) error {
+		return rs.QueryService.StreamExecute(ctx, rs.Target, query, bindVars[i], 0, options, func(qr *sqltypes.Result) error {
 			return stc.processOneStreamingResult(&mu, &fieldSent, qr, callback)
 		})
 	})
@@ -692,7 +700,7 @@ func injectShuffleQueryPartsRandomGenerator(
 	return oldRandGen
 }
 
-// shuffleQueryParts performs an in-place shuffle of the the given array.
+// shuffleQueryParts performs an in-place shuffle of the given array.
 // The result is a psuedo-random permutation of the array chosen uniformally
 // from the space of all permutations.
 func shuffleQueryParts(splits []*vtgatepb.SplitQueryResponse_Part) {
@@ -759,6 +767,10 @@ func (stc *ScatterConn) multiGo(
 // and updates the Session with the transaction id. If the session already
 // contains a transaction id for the shard, it reuses it.
 // The action function must match the shardActionTransactionFunc signature.
+//
+// It returns an error recorder in which each shard error is recorded positionally,
+// i.e. if rss[2] had an error, then the error recorder will store that error
+// in the second position.
 func (stc *ScatterConn) multiGoTransaction(
 	ctx context.Context,
 	name string,
@@ -767,12 +779,14 @@ func (stc *ScatterConn) multiGoTransaction(
 	session *SafeSession,
 	notInTransaction bool,
 	action shardActionTransactionFunc,
-) error {
-	if len(rss) == 0 {
-		return nil
-	}
+) (allErrors *concurrency.AllErrorRecorder) {
 
-	allErrors := new(concurrency.AllErrorRecorder)
+	numShards := len(rss)
+	allErrors = new(concurrency.AllErrorRecorder)
+
+	if numShards == 0 {
+		return allErrors
+	}
 	oneShard := func(rs *srvtopo.ResolvedShard, i int) {
 		var err error
 		startTime, statsKey := stc.startAction(name, rs.Target)
@@ -791,7 +805,7 @@ func (stc *ScatterConn) multiGoTransaction(
 	}
 
 	var wg sync.WaitGroup
-	if len(rss) == 1 {
+	if numShards == 1 {
 		// only one shard, do it synchronously.
 		for i, rs := range rss {
 			oneShard(rs, i)
@@ -812,10 +826,7 @@ end:
 	if session.MustRollback() {
 		stc.txConn.Rollback(ctx, session)
 	}
-	if allErrors.HasErrors() {
-		return allErrors.AggrError(vterrors.Aggregate)
-	}
-	return nil
+	return allErrors
 }
 
 // transactionInfo looks at the current session, and returns:

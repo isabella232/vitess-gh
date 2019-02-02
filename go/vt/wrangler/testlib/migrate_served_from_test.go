@@ -81,10 +81,12 @@ func TestMigrateServedFrom(t *testing.T) {
 	// sourceMaster will see the refresh, and has to respond to it
 	// also will be asked about its replication position.
 	sourceMaster.FakeMysqlDaemon.CurrentMasterPosition = mysql.Position{
-		GTIDSet: mysql.MariadbGTID{
-			Domain:   5,
-			Server:   456,
-			Sequence: 892,
+		GTIDSet: mysql.MariadbGTIDSet{
+			mysql.MariadbGTID{
+				Domain:   5,
+				Server:   456,
+				Sequence: 892,
+			},
 		},
 	}
 	sourceMaster.StartActionLoop(t, wr)
@@ -109,10 +111,13 @@ func TestMigrateServedFrom(t *testing.T) {
 	if err := destMaster.Agent.VREngine.Open(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	// select pos from _vt.vreplication
-	dbClient.ExpectRequest("select pos from _vt.vreplication where id=1", &sqltypes.Result{Rows: [][]sqltypes.Value{{
+	// select pos, state, message from _vt.vreplication
+	dbClient.ExpectRequest("select pos, state, message from _vt.vreplication where id=1", &sqltypes.Result{Rows: [][]sqltypes.Value{{
 		sqltypes.NewVarBinary("MariaDB/5-456-892"),
+		sqltypes.NewVarBinary("Running"),
+		sqltypes.NewVarBinary(""),
 	}}}, nil)
+	dbClient.ExpectRequest("use _vt", &sqltypes.Result{}, nil)
 	dbClient.ExpectRequest("delete from _vt.vreplication where id = 1", &sqltypes.Result{RowsAffected: 1}, nil)
 
 	// simulate the clone, by fixing the dest shard record

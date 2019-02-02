@@ -16,7 +16,7 @@ hostname=`hostname -f`
 vtctld_web_port=15000
 
 # Set up environment.
-export VTTOP=$VTROOT/src/vitess.io/vitess
+export VTTOP=${VTTOP-$VTROOT/src/vitess.io/vitess}
 
 # Try to find mysqld_safe on PATH.
 if [ -z "$VT_MYSQL_ROOT" ]; then
@@ -28,6 +28,15 @@ if [ -z "$VT_MYSQL_ROOT" ]; then
   export VT_MYSQL_ROOT=$(dirname `dirname $mysql_path`)
 fi
 
+# restore MYSQL_FLAVOR, saved by bootstrap.sh
+if [ -r "$VTROOT/dist/MYSQL_FLAVOR" ]; then
+  MYSQL_FLAVOR=$(cat "$VTROOT/dist/MYSQL_FLAVOR")
+  export MYSQL_FLAVOR
+fi
+
+if [ -z "$MYSQL_FLAVOR" ]; then
+  export MYSQL_FLAVOR=MySQL56
+fi
 
 if [ "${TOPO}" = "etcd2" ]; then
     echo "enter etcd2 env"

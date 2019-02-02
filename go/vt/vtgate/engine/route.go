@@ -23,13 +23,16 @@ import (
 	"time"
 
 	"vitess.io/vitess/go/jsonutil"
+	"vitess.io/vitess/go/mysql"
 	"vitess.io/vitess/go/sqltypes"
+	"vitess.io/vitess/go/stats"
 	"vitess.io/vitess/go/vt/key"
 	"vitess.io/vitess/go/vt/srvtopo"
 	"vitess.io/vitess/go/vt/vterrors"
 	"vitess.io/vitess/go/vt/vtgate/vindexes"
 
 	querypb "vitess.io/vitess/go/vt/proto/query"
+	topodatapb "vitess.io/vitess/go/vt/proto/topodata"
 )
 
 var _ Primitive = (*Route)(nil)
@@ -47,6 +50,10 @@ type Route struct {
 	// TargetDestination specifies an explicit target destination to send the query to.
 	// This bypases the core of the v3 engine.
 	TargetDestination key.Destination
+
+	// TargetTabletType specifies an explicit target destination tablet type
+	// this is only used in conjunction with TargetDestination
+	TargetTabletType topodatapb.TabletType
 
 	// Query specifies the query to be executed.
 	Query string
@@ -71,6 +78,27 @@ type Route struct {
 
 	// QueryTimeout contains the optional timeout (in milliseconds) to apply to this query
 	QueryTimeout int
+
+	// ScatterErrorsAsWarnings is true if results should be returned even if some shards have an error
+	ScatterErrorsAsWarnings bool
+}
+
+// NewSimpleRoute creates a Route with the bare minimum of parameters.
+func NewSimpleRoute(opcode RouteOpcode, keyspace *vindexes.Keyspace) *Route {
+	return &Route{
+		Opcode:   opcode,
+		Keyspace: keyspace,
+	}
+}
+
+// NewRoute creates a Route.
+func NewRoute(opcode RouteOpcode, keyspace *vindexes.Keyspace, query, fieldQuery string) *Route {
+	return &Route{
+		Opcode:     opcode,
+		Keyspace:   keyspace,
+		Query:      query,
+		FieldQuery: fieldQuery,
+	}
 }
 
 // OrderbyParams specifies the parameters for ordering.
@@ -88,25 +116,27 @@ func (route *Route) MarshalJSON() ([]byte, error) {
 		vindexName = route.Vindex.String()
 	}
 	marshalRoute := struct {
-		Opcode              RouteOpcode
-		Keyspace            *vindexes.Keyspace   `json:",omitempty"`
-		Query               string               `json:",omitempty"`
-		FieldQuery          string               `json:",omitempty"`
-		Vindex              string               `json:",omitempty"`
-		Values              []sqltypes.PlanValue `json:",omitempty"`
-		OrderBy             []OrderbyParams      `json:",omitempty"`
-		TruncateColumnCount int                  `json:",omitempty"`
-		QueryTimeout        int                  `json:",omitempty"`
+		Opcode                  RouteOpcode
+		Keyspace                *vindexes.Keyspace   `json:",omitempty"`
+		Query                   string               `json:",omitempty"`
+		FieldQuery              string               `json:",omitempty"`
+		Vindex                  string               `json:",omitempty"`
+		Values                  []sqltypes.PlanValue `json:",omitempty"`
+		OrderBy                 []OrderbyParams      `json:",omitempty"`
+		TruncateColumnCount     int                  `json:",omitempty"`
+		QueryTimeout            int                  `json:",omitempty"`
+		ScatterErrorsAsWarnings bool                 `json:",omitempty"`
 	}{
-		Opcode:              route.Opcode,
-		Keyspace:            route.Keyspace,
-		Query:               route.Query,
-		FieldQuery:          route.FieldQuery,
-		Vindex:              vindexName,
-		Values:              route.Values,
-		OrderBy:             route.OrderBy,
-		TruncateColumnCount: route.TruncateColumnCount,
-		QueryTimeout:        route.QueryTimeout,
+		Opcode:                  route.Opcode,
+		Keyspace:                route.Keyspace,
+		Query:                   route.Query,
+		FieldQuery:              route.FieldQuery,
+		Vindex:                  vindexName,
+		Values:                  route.Values,
+		OrderBy:                 route.OrderBy,
+		TruncateColumnCount:     route.TruncateColumnCount,
+		QueryTimeout:            route.QueryTimeout,
+		ScatterErrorsAsWarnings: route.ScatterErrorsAsWarnings,
 	}
 	return jsonutil.MarshalNoEscape(marshalRoute)
 }
@@ -151,6 +181,10 @@ var routeName = map[RouteOpcode]string{
 	SelectNext:        "SelectNext",
 	SelectDBA:         "SelectDBA",
 }
+
+var (
+	partialSuccessScatterQueries = stats.NewCounter("PartialSuccessScatterQueries", "Count of partially successful scatter queries")
+)
 
 // MarshalJSON serializes the RouteOpcode as a JSON string.
 // It's used for testing and diagnostics.
@@ -209,9 +243,22 @@ func (route *Route) execute(vcursor VCursor, bindVars map[string]*querypb.BindVa
 	}
 
 	queries := getQueries(route.Query, bvs)
-	result, err := vcursor.ExecuteMultiShard(rss, queries, false /* isDML */, false /* autocommit */)
-	if err != nil {
-		return nil, err
+	result, errs := vcursor.ExecuteMultiShard(rss, queries, false /* isDML */, false /* autocommit */)
+
+	if errs != nil {
+		if route.ScatterErrorsAsWarnings {
+			partialSuccessScatterQueries.Add(1)
+
+			for _, err := range errs {
+				if err != nil {
+					serr := mysql.NewSQLErrorFromError(err).(*mysql.SQLError)
+					vcursor.RecordWarning(&querypb.QueryWarning{Code: uint32(serr.Num), Message: err.Error()})
+				}
+			}
+			// fall through
+		} else {
+			return nil, vterrors.Aggregate(errs)
+		}
 	}
 	if len(route.OrderBy) == 0 {
 		return result, nil
@@ -421,12 +468,13 @@ func execAnyShard(vcursor VCursor, query string, bindVars map[string]*querypb.Bi
 
 func execShard(vcursor VCursor, query string, bindVars map[string]*querypb.BindVariable, rs *srvtopo.ResolvedShard, isDML, canAutocommit bool) (*sqltypes.Result, error) {
 	autocommit := canAutocommit && vcursor.AutocommitApproval()
-	return vcursor.ExecuteMultiShard([]*srvtopo.ResolvedShard{rs}, []*querypb.BoundQuery{
+	result, errs := vcursor.ExecuteMultiShard([]*srvtopo.ResolvedShard{rs}, []*querypb.BoundQuery{
 		{
 			Sql:           query,
 			BindVariables: bindVars,
 		},
 	}, isDML, autocommit)
+	return result, vterrors.Aggregate(errs)
 }
 
 func getQueries(query string, bvs []map[string]*querypb.BindVariable) []*querypb.BoundQuery {

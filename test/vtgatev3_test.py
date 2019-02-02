@@ -680,6 +680,33 @@ class TestVTGateFunctions(unittest.TestCase):
         ([(0,)], 1L, 0,
          [(u'SLEEP(1)', self.int_type)]))
 
+    # test shard errors as warnings directive
+    cursor.execute('SELECT /*vt+ SCATTER_ERRORS_AS_WARNINGS */ bad from vt_user', {})
+    print vtgate_conn.get_warnings()
+    warnings = vtgate_conn.get_warnings()
+    self.assertEqual(len(warnings), 2)
+    for warning in warnings:
+        self.assertEqual(warning.code, 1054)
+        self.assertIn('errno 1054', warning.message)
+        self.assertIn('Unknown column', warning.message)
+    self.assertEqual(
+        (cursor.fetchall(), cursor.rowcount, cursor.lastrowid,
+         cursor.description),
+        ([], 0L, 0, []))
+
+    # test shard errors as warnings directive with timeout
+    cursor.execute('SELECT /*vt+ SCATTER_ERRORS_AS_WARNINGS QUERY_TIMEOUT_MS=10 */ SLEEP(1)', {})
+    print vtgate_conn.get_warnings()
+    warnings = vtgate_conn.get_warnings()
+    self.assertEqual(len(warnings), 1)
+    for warning in warnings:
+        self.assertEqual(warning.code, 1317)
+        self.assertIn('context deadline exceeded', warning.message)
+    self.assertEqual(
+        (cursor.fetchall(), cursor.rowcount, cursor.lastrowid,
+         cursor.description),
+        ([], 0L, 0, []))
+
     # Test insert with no auto-inc
     vtgate_conn.begin()
     result = self.execute_on_master(
@@ -1653,7 +1680,7 @@ class TestVTGateFunctions(unittest.TestCase):
         [(1, 1, 1, 1), (3, 3, 3, 0), (4, 4, 4, 0),
          (5, 5, 5, 5), (6, 6, 6, 6), (7, 7, 7, 7)])
 
-  def test_joins(self):
+  def test_joins_subqueries(self):
     vtgate_conn = get_connection()
     vtgate_conn.begin()
     self.execute_on_master(
@@ -1761,6 +1788,20 @@ class TestVTGateFunctions(unittest.TestCase):
          [('id', self.int_type),
           ('name', self.string_type),
           ('info', self.string_type)]))
+
+    # test a cross-shard subquery
+    result = self.execute_on_master(
+        vtgate_conn,
+        'select id, name from join_user '
+        'where id in (select user_id from join_user_extra)',
+        {})
+    self.assertEqual(
+        result,
+        ([(1L, 'name1')],
+         1,
+         0,
+         [('id', self.int_type),
+          ('name', self.string_type)]))
     vtgate_conn.begin()
     self.execute_on_master(
         vtgate_conn,

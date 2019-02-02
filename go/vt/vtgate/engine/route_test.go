@@ -20,10 +20,10 @@ import (
 	"errors"
 	"testing"
 
+	"vitess.io/vitess/go/mysql"
 	"vitess.io/vitess/go/sqltypes"
-	"vitess.io/vitess/go/vt/vtgate/vindexes"
-
 	querypb "vitess.io/vitess/go/vt/proto/query"
+	"vitess.io/vitess/go/vt/vtgate/vindexes"
 )
 
 var defaultSelectResult = sqltypes.MakeTestResult(
@@ -35,15 +35,15 @@ var defaultSelectResult = sqltypes.MakeTestResult(
 )
 
 func TestSelectUnsharded(t *testing.T) {
-	sel := &Route{
-		Opcode: SelectUnsharded,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectUnsharded,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: false,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
 
 	vc := &loggingVCursor{
 		shards:  []string{"0"},
@@ -72,15 +72,15 @@ func TestSelectUnsharded(t *testing.T) {
 }
 
 func TestSelectScatter(t *testing.T) {
-	sel := &Route{
-		Opcode: SelectScatter,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectScatter,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: true,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
 
 	vc := &loggingVCursor{
 		shards:  []string{"-20", "20-"},
@@ -110,17 +110,17 @@ func TestSelectScatter(t *testing.T) {
 
 func TestSelectEqualUnique(t *testing.T) {
 	vindex, _ := vindexes.NewHash("", nil)
-	sel := &Route{
-		Opcode: SelectEqualUnique,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectEqualUnique,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: true,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-		Vindex:     vindex,
-		Values:     []sqltypes.PlanValue{{Value: sqltypes.NewInt64(1)}},
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.Vindex = vindex
+	sel.Values = []sqltypes.PlanValue{{Value: sqltypes.NewInt64(1)}}
 
 	vc := &loggingVCursor{
 		shards:  []string{"-20", "20-"},
@@ -155,17 +155,17 @@ func TestSelectEqualUniqueScatter(t *testing.T) {
 		"to":         "toc",
 		"write_only": "true",
 	})
-	sel := &Route{
-		Opcode: SelectEqualUnique,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectEqualUnique,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: true,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-		Vindex:     vindex,
-		Values:     []sqltypes.PlanValue{{Value: sqltypes.NewInt64(1)}},
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.Vindex = vindex
+	sel.Values = []sqltypes.PlanValue{{Value: sqltypes.NewInt64(1)}}
 
 	vc := &loggingVCursor{
 		shards:  []string{"-20", "20-"},
@@ -199,17 +199,17 @@ func TestSelectEqual(t *testing.T) {
 		"from":  "from",
 		"to":    "toc",
 	})
-	sel := &Route{
-		Opcode: SelectEqual,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectEqual,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: true,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-		Vindex:     vindex,
-		Values:     []sqltypes.PlanValue{{Value: sqltypes.NewInt64(1)}},
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.Vindex = vindex
+	sel.Values = []sqltypes.PlanValue{{Value: sqltypes.NewInt64(1)}}
 
 	vc := &loggingVCursor{
 		shards: []string{"-20", "20-"},
@@ -255,17 +255,17 @@ func TestSelectEqualNoRoute(t *testing.T) {
 		"from":  "from",
 		"to":    "toc",
 	})
-	sel := &Route{
-		Opcode: SelectEqual,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectEqual,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: true,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-		Vindex:     vindex,
-		Values:     []sqltypes.PlanValue{{Value: sqltypes.NewInt64(1)}},
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.Vindex = vindex
+	sel.Values = []sqltypes.PlanValue{{Value: sqltypes.NewInt64(1)}}
 
 	vc := &loggingVCursor{shards: []string{"-20", "20-"}}
 	result, err := sel.Execute(vc, map[string]*querypb.BindVariable{}, false)
@@ -292,25 +292,25 @@ func TestSelectEqualNoRoute(t *testing.T) {
 
 func TestSelectINUnique(t *testing.T) {
 	vindex, _ := vindexes.NewHash("", nil)
-	sel := &Route{
-		Opcode: SelectIN,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectIN,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: true,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-		Vindex:     vindex,
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.Vindex = vindex
+	sel.Values = []sqltypes.PlanValue{{
 		Values: []sqltypes.PlanValue{{
-			Values: []sqltypes.PlanValue{{
-				Value: sqltypes.NewInt64(1),
-			}, {
-				Value: sqltypes.NewInt64(2),
-			}, {
-				Value: sqltypes.NewInt64(4),
-			}},
+			Value: sqltypes.NewInt64(1),
+		}, {
+			Value: sqltypes.NewInt64(2),
+		}, {
+			Value: sqltypes.NewInt64(4),
 		}},
-	}
+	}}
 
 	vc := &loggingVCursor{
 		shards:       []string{"-20", "20-"},
@@ -348,25 +348,25 @@ func TestSelectINNonUnique(t *testing.T) {
 		"from":  "from",
 		"to":    "toc",
 	})
-	sel := &Route{
-		Opcode: SelectIN,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectIN,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: true,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-		Vindex:     vindex,
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.Vindex = vindex
+	sel.Values = []sqltypes.PlanValue{{
 		Values: []sqltypes.PlanValue{{
-			Values: []sqltypes.PlanValue{{
-				Value: sqltypes.NewInt64(1),
-			}, {
-				Value: sqltypes.NewInt64(2),
-			}, {
-				Value: sqltypes.NewInt64(4),
-			}},
+			Value: sqltypes.NewInt64(1),
+		}, {
+			Value: sqltypes.NewInt64(2),
+		}, {
+			Value: sqltypes.NewInt64(4),
 		}},
-	}
+	}}
 
 	fields := sqltypes.MakeTestFields(
 		"toc",
@@ -426,15 +426,15 @@ func TestSelectINNonUnique(t *testing.T) {
 }
 
 func TestSelectNext(t *testing.T) {
-	sel := &Route{
-		Opcode: SelectNext,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectNext,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: true,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
 
 	vc := &loggingVCursor{
 		shards:  []string{"-20", "20-"},
@@ -456,15 +456,15 @@ func TestSelectNext(t *testing.T) {
 }
 
 func TestSelectDBA(t *testing.T) {
-	sel := &Route{
-		Opcode: SelectDBA,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectDBA,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: true,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
 
 	vc := &loggingVCursor{
 		shards:  []string{"-20", "20-"},
@@ -491,17 +491,17 @@ func TestRouteGetFields(t *testing.T) {
 		"from":  "from",
 		"to":    "toc",
 	})
-	sel := &Route{
-		Opcode: SelectEqual,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectEqual,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: true,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-		Vindex:     vindex,
-		Values:     []sqltypes.PlanValue{{Value: sqltypes.NewInt64(1)}},
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.Vindex = vindex
+	sel.Values = []sqltypes.PlanValue{{Value: sqltypes.NewInt64(1)}}
 
 	vc := &loggingVCursor{shards: []string{"-20", "20-"}}
 	result, err := sel.Execute(vc, map[string]*querypb.BindVariable{}, true)
@@ -531,18 +531,18 @@ func TestRouteGetFields(t *testing.T) {
 }
 
 func TestRouteSort(t *testing.T) {
-	sel := &Route{
-		Opcode: SelectUnsharded,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectUnsharded,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: false,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-		OrderBy: []OrderbyParams{{
-			Col: 0,
-		}},
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.OrderBy = []OrderbyParams{{
+		Col: 0,
+	}}
 
 	vc := &loggingVCursor{
 		shards: []string{"0"},
@@ -616,19 +616,19 @@ func TestRouteSort(t *testing.T) {
 }
 
 func TestRouteSortTruncate(t *testing.T) {
-	sel := &Route{
-		Opcode: SelectUnsharded,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectUnsharded,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: false,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-		OrderBy: []OrderbyParams{{
-			Col: 0,
-		}},
-		TruncateColumnCount: 1,
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.OrderBy = []OrderbyParams{{
+		Col: 0,
+	}}
+	sel.TruncateColumnCount = 1
 
 	vc := &loggingVCursor{
 		shards: []string{"0"},
@@ -667,16 +667,16 @@ func TestRouteSortTruncate(t *testing.T) {
 }
 
 func TestRouteStreamTruncate(t *testing.T) {
-	sel := &Route{
-		Opcode: SelectUnsharded,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectUnsharded,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: false,
 		},
-		Query:               "dummy_select",
-		FieldQuery:          "dummy_select_field",
-		TruncateColumnCount: 1,
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.TruncateColumnCount = 1
 
 	vc := &loggingVCursor{
 		shards: []string{"0"},
@@ -711,19 +711,19 @@ func TestRouteStreamTruncate(t *testing.T) {
 }
 
 func TestRouteStreamSortTruncate(t *testing.T) {
-	sel := &Route{
-		Opcode: SelectUnsharded,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectUnsharded,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: false,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-		OrderBy: []OrderbyParams{{
-			Col: 0,
-		}},
-		TruncateColumnCount: 1,
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.OrderBy = []OrderbyParams{{
+		Col: 0,
+	}}
+	sel.TruncateColumnCount = 1
 
 	vc := &loggingVCursor{
 		shards: []string{"0"},
@@ -762,15 +762,15 @@ func TestRouteStreamSortTruncate(t *testing.T) {
 }
 
 func TestParamsFail(t *testing.T) {
-	sel := &Route{
-		Opcode: SelectUnsharded,
-		Keyspace: &vindexes.Keyspace{
+	sel := NewRoute(
+		SelectUnsharded,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: false,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
 
 	vc := &loggingVCursor{shardErr: errors.New("shard error")}
 	_, err := sel.Execute(vc, map[string]*querypb.BindVariable{}, false)
@@ -782,21 +782,121 @@ func TestParamsFail(t *testing.T) {
 }
 
 func TestExecFail(t *testing.T) {
-	sel := &Route{
-		Opcode: SelectUnsharded,
-		Keyspace: &vindexes.Keyspace{
+	// Unsharded error
+	sel := NewRoute(
+		SelectUnsharded,
+		&vindexes.Keyspace{
 			Name:    "ks",
 			Sharded: false,
 		},
-		Query:      "dummy_select",
-		FieldQuery: "dummy_select_field",
-	}
+		"dummy_select",
+		"dummy_select_field",
+	)
 
-	vc := &loggingVCursor{shards: []string{"0"}, resultErr: errors.New("result error")}
+	vc := &loggingVCursor{shards: []string{"0"}, resultErr: mysql.NewSQLError(mysql.ERQueryInterrupted, "", "query timeout")}
 	_, err := sel.Execute(vc, map[string]*querypb.BindVariable{}, false)
-	expectError(t, "sel.Execute err", err, "result error")
+	expectError(t, "sel.Execute err", err, "query timeout (errno 1317) (sqlstate HY000)")
+	vc.ExpectWarnings(t, nil)
 
 	vc.Rewind()
 	_, err = wrapStreamExecute(sel, vc, map[string]*querypb.BindVariable{}, false)
-	expectError(t, "sel.StreamExecute err", err, "result error")
+	expectError(t, "sel.StreamExecute err", err, "query timeout (errno 1317) (sqlstate HY000)")
+
+	// Scatter fails if one of N fails without ScatterErrorsAsWarnings
+	sel = NewRoute(
+		SelectScatter,
+		&vindexes.Keyspace{
+			Name:    "ks",
+			Sharded: true,
+		},
+		"dummy_select",
+		"dummy_select_field",
+	)
+
+	vc = &loggingVCursor{
+		shards:  []string{"-20", "20-"},
+		results: []*sqltypes.Result{defaultSelectResult},
+		multiShardErrs: []error{
+			errors.New("result error -20"),
+		},
+	}
+	_, err = sel.Execute(vc, map[string]*querypb.BindVariable{}, false)
+	expectError(t, "sel.Execute err", err, "result error -20")
+	vc.ExpectWarnings(t, nil)
+	vc.ExpectLog(t, []string{
+		`ResolveDestinations ks [] Destinations:DestinationAllShards()`,
+		`ExecuteMultiShard ks.-20: dummy_select {} ks.20-: dummy_select {} false false`,
+	})
+
+	vc.Rewind()
+
+	// Scatter succeeds if all shards fail with ScatterErrorsAsWarnings
+	sel = NewRoute(
+		SelectScatter,
+		&vindexes.Keyspace{
+			Name:    "ks",
+			Sharded: true,
+		},
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.ScatterErrorsAsWarnings = true
+
+	vc = &loggingVCursor{
+		shards:  []string{"-20", "20-"},
+		results: []*sqltypes.Result{defaultSelectResult},
+		multiShardErrs: []error{
+			mysql.NewSQLError(mysql.ERQueryInterrupted, "", "query timeout -20"),
+			errors.New("not a sql error 20-"),
+		},
+	}
+	_, err = sel.Execute(vc, map[string]*querypb.BindVariable{}, false)
+	if err != nil {
+		t.Errorf("unexpected ScatterErrorsAsWarnings error %v", err)
+	}
+
+	// Ensure that the error code is preserved from SQLErrors and that it
+	// turns into ERUnknownError for all others
+	vc.ExpectWarnings(t, []*querypb.QueryWarning{
+		{Code: mysql.ERQueryInterrupted, Message: "query timeout -20 (errno 1317) (sqlstate HY000)"},
+		{Code: mysql.ERUnknownError, Message: "not a sql error 20-"},
+	})
+	vc.ExpectLog(t, []string{
+		`ResolveDestinations ks [] Destinations:DestinationAllShards()`,
+		`ExecuteMultiShard ks.-20: dummy_select {} ks.20-: dummy_select {} false false`,
+	})
+
+	vc.Rewind()
+
+	// Scatter succeeds if one of N fails with ScatterErrorsAsWarnings
+	sel = NewRoute(
+		SelectScatter,
+		&vindexes.Keyspace{
+			Name:    "ks",
+			Sharded: true,
+		},
+		"dummy_select",
+		"dummy_select_field",
+	)
+	sel.ScatterErrorsAsWarnings = true
+
+	vc = &loggingVCursor{
+		shards:  []string{"-20", "20-"},
+		results: []*sqltypes.Result{defaultSelectResult},
+		multiShardErrs: []error{
+			errors.New("result error -20"),
+			nil,
+		},
+	}
+	result, err := sel.Execute(vc, map[string]*querypb.BindVariable{}, false)
+	if err != nil {
+		t.Errorf("unexpected ScatterErrorsAsWarnings error %v", err)
+	}
+	vc.ExpectLog(t, []string{
+		`ResolveDestinations ks [] Destinations:DestinationAllShards()`,
+		`ExecuteMultiShard ks.-20: dummy_select {} ks.20-: dummy_select {} false false`,
+	})
+	expectResult(t, "sel.Execute", result, defaultSelectResult)
+
+	vc.Rewind()
 }

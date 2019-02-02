@@ -89,6 +89,9 @@ func Parse(sql string) (Statement, error) {
 	tokenizer := NewStringTokenizer(sql)
 	if yyParsePooled(tokenizer) != 0 {
 		if tokenizer.partialDDL != nil {
+			if typ, val := tokenizer.Scan(); typ != 0 {
+				return nil, fmt.Errorf("extra characters encountered after end of DDL: '%s'", string(val))
+			}
 			log.Warningf("ignoring error parsing DDL '%s': %v", sql, tokenizer.LastError)
 			tokenizer.ParseTree = tokenizer.partialDDL
 			return tokenizer.ParseTree, nil
@@ -587,6 +590,7 @@ func (*ParenSelect) iInsertRows() {}
 // If you add fields here, consider adding them to calls to validateSubquerySamePlan.
 type Update struct {
 	Comments   Comments
+	Ignore     string
 	TableExprs TableExprs
 	Exprs      UpdateExprs
 	Where      *Where
@@ -596,8 +600,8 @@ type Update struct {
 
 // Format formats the node.
 func (node *Update) Format(buf *TrackedBuffer) {
-	buf.Myprintf("update %v%v set %v%v%v%v",
-		node.Comments, node.TableExprs,
+	buf.Myprintf("update %v%s%v set %v%v%v%v",
+		node.Comments, node.Ignore, node.TableExprs,
 		node.Exprs, node.Where, node.OrderBy, node.Limit)
 }
 
@@ -714,33 +718,46 @@ func (node *DBDDL) walkSubtree(visit Visit) error {
 	return nil
 }
 
-// DDL represents a CREATE, ALTER, DROP, RENAME or TRUNCATE statement.
-// Table is set for AlterStr, DropStr, RenameStr, TruncateStr
-// NewName is set for AlterStr, CreateStr, RenameStr.
-// VindexSpec is set for CreateVindexStr, DropVindexStr, AddColVindexStr, DropColVindexStr
-// VindexCols is set for AddColVindexStr
+// DDL represents a CREATE, ALTER, DROP, RENAME, TRUNCATE or ANALYZE statement.
 type DDL struct {
-	Action        string
-	Table         TableName
-	NewName       TableName
+	Action string
+
+	// FromTables is set if Action is RenameStr or DropStr.
+	FromTables TableNames
+
+	// ToTables is set if Action is RenameStr.
+	ToTables TableNames
+
+	// Table is set if Action is other than RenameStr or DropStr.
+	Table TableName
+
+	// The following fields are set if a DDL was fully analyzed.
 	IfExists      bool
 	TableSpec     *TableSpec
 	OptLike       *OptLike
 	PartitionSpec *PartitionSpec
-	VindexSpec    *VindexSpec
-	VindexCols    []ColIdent
+
+	// VindexSpec is set for CreateVindexStr, DropVindexStr, AddColVindexStr, DropColVindexStr.
+	VindexSpec *VindexSpec
+
+	// VindexCols is set for AddColVindexStr.
+	VindexCols []ColIdent
 }
 
 // DDL strings.
 const (
-	CreateStr        = "create"
-	AlterStr         = "alter"
-	DropStr          = "drop"
-	RenameStr        = "rename"
-	TruncateStr      = "truncate"
-	CreateVindexStr  = "create vindex"
-	AddColVindexStr  = "add vindex"
-	DropColVindexStr = "drop vindex"
+	CreateStr           = "create"
+	AlterStr            = "alter"
+	DropStr             = "drop"
+	RenameStr           = "rename"
+	TruncateStr         = "truncate"
+	FlushStr            = "flush"
+	CreateVindexStr     = "create vindex"
+	DropVindexStr       = "drop vindex"
+	AddVschemaTableStr  = "add vschema table"
+	DropVschemaTableStr = "drop vschema table"
+	AddColVindexStr     = "on table add vindex"
+	DropColVindexStr    = "on table drop vindex"
 
 	// Vindex DDL param to specify the owner of a vindex
 	VindexOwnerStr = "owner"
@@ -751,30 +768,41 @@ func (node *DDL) Format(buf *TrackedBuffer) {
 	switch node.Action {
 	case CreateStr:
 		if node.OptLike != nil {
-			buf.Myprintf("%s table %v %v", node.Action, node.NewName, node.OptLike)
+			buf.Myprintf("%s table %v %v", node.Action, node.Table, node.OptLike)
 		} else if node.TableSpec != nil {
-			buf.Myprintf("%s table %v %v", node.Action, node.NewName, node.TableSpec)
+			buf.Myprintf("%s table %v %v", node.Action, node.Table, node.TableSpec)
 		} else {
-			buf.Myprintf("%s table %v", node.Action, node.NewName)
+			buf.Myprintf("%s table %v", node.Action, node.Table)
 		}
 	case DropStr:
 		exists := ""
 		if node.IfExists {
 			exists = " if exists"
 		}
-		buf.Myprintf("%s table%s %v", node.Action, exists, node.Table)
+		buf.Myprintf("%s table%s %v", node.Action, exists, node.FromTables)
 	case RenameStr:
-		buf.Myprintf("%s table %v to %v", node.Action, node.Table, node.NewName)
+		buf.Myprintf("%s table %v to %v", node.Action, node.FromTables[0], node.ToTables[0])
+		for i := 1; i < len(node.FromTables); i++ {
+			buf.Myprintf(", %v to %v", node.FromTables[i], node.ToTables[i])
+		}
 	case AlterStr:
 		if node.PartitionSpec != nil {
 			buf.Myprintf("%s table %v %v", node.Action, node.Table, node.PartitionSpec)
 		} else {
 			buf.Myprintf("%s table %v", node.Action, node.Table)
 		}
+	case FlushStr:
+		buf.Myprintf("%s", node.Action)
 	case CreateVindexStr:
-		buf.Myprintf("%s %v %v", node.Action, node.VindexSpec.Name, node.VindexSpec)
+		buf.Myprintf("alter vschema create vindex %v %v", node.VindexSpec.Name, node.VindexSpec)
+	case DropVindexStr:
+		buf.Myprintf("alter vschema drop vindex %v", node.VindexSpec.Name)
+	case AddVschemaTableStr:
+		buf.Myprintf("alter vschema add table %v", node.Table)
+	case DropVschemaTableStr:
+		buf.Myprintf("alter vschema drop table %v", node.Table)
 	case AddColVindexStr:
-		buf.Myprintf("alter table %v %s %v (", node.Table, node.Action, node.VindexSpec.Name)
+		buf.Myprintf("alter vschema on %v add vindex %v (", node.Table, node.VindexSpec.Name)
 		for i, col := range node.VindexCols {
 			if i != 0 {
 				buf.Myprintf(", %v", col)
@@ -787,7 +815,7 @@ func (node *DDL) Format(buf *TrackedBuffer) {
 			buf.Myprintf(" %v", node.VindexSpec)
 		}
 	case DropColVindexStr:
-		buf.Myprintf("alter table %v %s %v", node.Table, node.Action, node.VindexSpec.Name)
+		buf.Myprintf("alter vschema on %v drop vindex %v", node.Table, node.VindexSpec.Name)
 	default:
 		buf.Myprintf("%s table %v", node.Action, node.Table)
 	}
@@ -797,11 +825,23 @@ func (node *DDL) walkSubtree(visit Visit) error {
 	if node == nil {
 		return nil
 	}
-	return Walk(
-		visit,
-		node.Table,
-		node.NewName,
-	)
+	for _, t := range node.AffectedTables() {
+		if err := Walk(visit, t); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AffectedTables returns the list table names affected by the DDL.
+func (node *DDL) AffectedTables() TableNames {
+	if node.Action == RenameStr || node.Action == DropStr {
+		list := make(TableNames, 0, len(node.FromTables)+len(node.ToTables))
+		list = append(list, node.FromTables...)
+		list = append(list, node.ToTables...)
+		return list
+	}
+	return TableNames{node.Table}
 }
 
 // Partition strings
@@ -2111,34 +2151,35 @@ type Expr interface {
 	SQLNode
 }
 
-func (*AndExpr) iExpr()          {}
-func (*OrExpr) iExpr()           {}
-func (*NotExpr) iExpr()          {}
-func (*ParenExpr) iExpr()        {}
-func (*ComparisonExpr) iExpr()   {}
-func (*RangeCond) iExpr()        {}
-func (*IsExpr) iExpr()           {}
-func (*ExistsExpr) iExpr()       {}
-func (*SQLVal) iExpr()           {}
-func (*NullVal) iExpr()          {}
-func (BoolVal) iExpr()           {}
-func (*ColName) iExpr()          {}
-func (ValTuple) iExpr()          {}
-func (*Subquery) iExpr()         {}
-func (ListArg) iExpr()           {}
-func (*BinaryExpr) iExpr()       {}
-func (*UnaryExpr) iExpr()        {}
-func (*IntervalExpr) iExpr()     {}
-func (*CollateExpr) iExpr()      {}
-func (*FuncExpr) iExpr()         {}
-func (*CaseExpr) iExpr()         {}
-func (*ValuesFuncExpr) iExpr()   {}
-func (*ConvertExpr) iExpr()      {}
-func (*SubstrExpr) iExpr()       {}
-func (*ConvertUsingExpr) iExpr() {}
-func (*MatchExpr) iExpr()        {}
-func (*GroupConcatExpr) iExpr()  {}
-func (*Default) iExpr()          {}
+func (*AndExpr) iExpr()           {}
+func (*OrExpr) iExpr()            {}
+func (*NotExpr) iExpr()           {}
+func (*ParenExpr) iExpr()         {}
+func (*ComparisonExpr) iExpr()    {}
+func (*RangeCond) iExpr()         {}
+func (*IsExpr) iExpr()            {}
+func (*ExistsExpr) iExpr()        {}
+func (*SQLVal) iExpr()            {}
+func (*NullVal) iExpr()           {}
+func (BoolVal) iExpr()            {}
+func (*ColName) iExpr()           {}
+func (ValTuple) iExpr()           {}
+func (*Subquery) iExpr()          {}
+func (ListArg) iExpr()            {}
+func (*BinaryExpr) iExpr()        {}
+func (*UnaryExpr) iExpr()         {}
+func (*IntervalExpr) iExpr()      {}
+func (*CollateExpr) iExpr()       {}
+func (*FuncExpr) iExpr()          {}
+func (*TimestampFuncExpr) iExpr() {}
+func (*CaseExpr) iExpr()          {}
+func (*ValuesFuncExpr) iExpr()    {}
+func (*ConvertExpr) iExpr()       {}
+func (*SubstrExpr) iExpr()        {}
+func (*ConvertUsingExpr) iExpr()  {}
+func (*MatchExpr) iExpr()         {}
+func (*GroupConcatExpr) iExpr()   {}
+func (*Default) iExpr()           {}
 
 // ReplaceExpr finds the from expression from root
 // and replaces it with to. If from matches root,
@@ -2337,6 +2378,32 @@ func (node *ComparisonExpr) walkSubtree(visit Visit) error {
 
 func (node *ComparisonExpr) replace(from, to Expr) bool {
 	return replaceExprs(from, to, &node.Left, &node.Right, &node.Escape)
+}
+
+// IsImpossible returns true if the comparison in the expression can never evaluate to true.
+// Note that this is not currently exhaustive to ALL impossible comparisons.
+func (node *ComparisonExpr) IsImpossible() bool {
+	var left, right *SQLVal
+	var ok bool
+	if left, ok = node.Left.(*SQLVal); !ok {
+		return false
+	}
+	if right, ok = node.Right.(*SQLVal); !ok {
+		return false
+	}
+	if node.Operator == NotEqualStr && left.Type == right.Type {
+		if len(left.Val) != len(right.Val) {
+			return false
+		}
+
+		for i := range left.Val {
+			if left.Val[i] != right.Val[i] {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // RangeCond represents a BETWEEN or a NOT BETWEEN expression.
@@ -2802,6 +2869,40 @@ func (node *IntervalExpr) replace(from, to Expr) bool {
 	return replaceExprs(from, to, &node.Expr)
 }
 
+// TimestampFuncExpr represents the function and arguments for TIMESTAMP{ADD,DIFF} functions.
+type TimestampFuncExpr struct {
+	Name  string
+	Expr1 Expr
+	Expr2 Expr
+	Unit  string
+}
+
+// Format formats the node.
+func (node *TimestampFuncExpr) Format(buf *TrackedBuffer) {
+	buf.Myprintf("%s(%s, %v, %v)", node.Name, node.Unit, node.Expr1, node.Expr2)
+}
+
+func (node *TimestampFuncExpr) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Expr1,
+		node.Expr2,
+	)
+}
+
+func (node *TimestampFuncExpr) replace(from, to Expr) bool {
+	if replaceExprs(from, to, &node.Expr1) {
+		return true
+	}
+	if replaceExprs(from, to, &node.Expr2) {
+		return true
+	}
+	return false
+}
+
 // CollateExpr represents dynamic collate operator.
 type CollateExpr struct {
 	Expr    Expr
@@ -2967,20 +3068,30 @@ func (node *ValuesFuncExpr) replace(from, to Expr) bool {
 }
 
 // SubstrExpr represents a call to SubstrExpr(column, value_expression) or SubstrExpr(column, value_expression,value_expression)
-// also supported syntax SubstrExpr(column from value_expression for value_expression)
+// also supported syntax SubstrExpr(column from value_expression for value_expression).
+// Additionally to column names, SubstrExpr is also supported for string values, e.g.:
+// SubstrExpr('static string value', value_expression, value_expression)
+// In this case StrVal will be set instead of Name.
 type SubstrExpr struct {
-	Name *ColName
-	From Expr
-	To   Expr
+	Name   *ColName
+	StrVal *SQLVal
+	From   Expr
+	To     Expr
 }
 
 // Format formats the node.
 func (node *SubstrExpr) Format(buf *TrackedBuffer) {
+	var val interface{}
+	if node.Name != nil {
+		val = node.Name
+	} else {
+		val = node.StrVal
+	}
 
 	if node.To == nil {
-		buf.Myprintf("substr(%v, %v)", node.Name, node.From)
+		buf.Myprintf("substr(%v, %v)", val, node.From)
 	} else {
-		buf.Myprintf("substr(%v, %v, %v)", node.Name, node.From, node.To)
+		buf.Myprintf("substr(%v, %v, %v)", val, node.From, node.To)
 	}
 }
 
@@ -2989,7 +3100,7 @@ func (node *SubstrExpr) replace(from, to Expr) bool {
 }
 
 func (node *SubstrExpr) walkSubtree(visit Visit) error {
-	if node == nil {
+	if node == nil || node.Name == nil {
 		return nil
 	}
 	return Walk(
@@ -3064,6 +3175,7 @@ type ConvertType struct {
 // this string is "character set" and this comment is required
 const (
 	CharacterSetStr = " character set"
+	CharsetStr      = "charset"
 )
 
 // Format formats the node.
@@ -3640,7 +3752,7 @@ mustEscape:
 }
 
 func compliantName(in string) string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	for i, c := range in {
 		if !isLetter(uint16(c)) {
 			if i == 0 || !isDigit(uint16(c)) {

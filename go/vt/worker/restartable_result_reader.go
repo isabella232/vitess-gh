@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	"vitess.io/vitess/go/vt/vterrors"
+
 	"golang.org/x/net/context"
 
 	"vitess.io/vitess/go/sqlescape"
@@ -51,6 +53,8 @@ type RestartableResultReader struct {
 	chunk chunk
 	// allowMultipleRetries is true if we are allowed to retry more than once.
 	allowMultipleRetries bool
+	// if we are running inside a transaction, this will hold a non-zero value
+	txID int64
 
 	query string
 
@@ -80,12 +84,57 @@ func NewRestartableResultReader(ctx context.Context, logger logutil.Logger, tp t
 		allowMultipleRetries: allowMultipleRetries,
 	}
 
-	// If the initial connection fails, we do not restart.
-	if _ /* retryable */, err := r.getTablet(); err != nil {
-		return nil, fmt.Errorf("tablet=unknown: %v", err)
+	err := tryToConnect(r)
+	if err != nil {
+		return nil, err
 	}
-	if _ /* retryable */, err := r.startStream(); err != nil {
-		return nil, fmt.Errorf("tablet=%v: %v", topoproto.TabletAliasString(r.tablet.Alias), err)
+	return r, nil
+}
+
+func tryToConnect(r *RestartableResultReader) error {
+
+	// If the initial connection fails we retry once.
+	// Note: The first retry will be the second attempt.
+	attempt := 0
+	for {
+		attempt++
+		var err error
+		var retryable bool
+		if retryable, err = r.getTablet(); err != nil {
+			err = fmt.Errorf("tablet=unknown: %v", err)
+			goto retry
+		}
+		if retryable, err = r.startStream(); err != nil {
+			err = fmt.Errorf("tablet=%v: %v", topoproto.TabletAliasString(r.tablet.Alias), err)
+			goto retry
+		}
+		return nil
+
+	retry:
+		if !retryable || attempt > 1 {
+			return fmt.Errorf("failed to initialize tablet connection: retryable %v, %v", retryable, err)
+		}
+		statsRetryCount.Add(1)
+		log.Infof("retrying after error: %v", err)
+	}
+
+}
+
+// NewTransactionalRestartableResultReader does the same thing that NewRestartableResultReader does,
+// but works inside of a single transaction
+func NewTransactionalRestartableResultReader(ctx context.Context, logger logutil.Logger, tp tabletProvider, td *tabletmanagerdatapb.TableDefinition, chunk chunk, allowMultipleRetries bool, txID int64) (*RestartableResultReader, error) {
+	r := &RestartableResultReader{
+		ctx:                  ctx,
+		logger:               logger,
+		tp:                   tp,
+		td:                   td,
+		chunk:                chunk,
+		allowMultipleRetries: allowMultipleRetries,
+		txID:                 txID,
+	}
+	err := tryToConnect(r)
+	if err != nil {
+		return nil, err
 	}
 	return r, nil
 }
@@ -107,13 +156,13 @@ func (r *RestartableResultReader) getTablet() (bool, error) {
 	// Get a tablet from the tablet provider.
 	tablet, err := r.tp.getTablet()
 	if err != nil {
-		return true /* retryable */, fmt.Errorf("failed get tablet for streaming query: %v", err)
+		return true /* retryable */, vterrors.Wrap(err, "failed get tablet for streaming query")
 	}
 
 	// Connect (dial) to the tablet.
 	conn, err := tabletconn.GetDialer()(tablet, grpcclient.FailFast(false))
 	if err != nil {
-		return false /* retryable */, fmt.Errorf("failed to get dialer for tablet: %v", err)
+		return false /* retryable */, vterrors.Wrap(err, "failed to get dialer for tablet")
 	}
 	r.tablet = tablet
 	r.conn = conn
@@ -127,16 +176,26 @@ func (r *RestartableResultReader) getTablet() (bool, error) {
 func (r *RestartableResultReader) startStream() (bool, error) {
 	// Start the streaming query.
 	r.generateQuery()
-	stream := queryservice.ExecuteWithStreamer(r.ctx, r.conn, &querypb.Target{
-		Keyspace:   r.tablet.Keyspace,
-		Shard:      r.tablet.Shard,
-		TabletType: r.tablet.Type,
-	}, r.query, make(map[string]*querypb.BindVariable), nil)
+	var stream sqltypes.ResultStream
+
+	if r.txID == 0 {
+		stream = queryservice.ExecuteWithStreamer(r.ctx, r.conn, &querypb.Target{
+			Keyspace:   r.tablet.Keyspace,
+			Shard:      r.tablet.Shard,
+			TabletType: r.tablet.Type,
+		}, r.query, make(map[string]*querypb.BindVariable), nil)
+	} else {
+		stream = queryservice.ExecuteWithTransactionalStreamer(r.ctx, r.conn, &querypb.Target{
+			Keyspace:   r.tablet.Keyspace,
+			Shard:      r.tablet.Shard,
+			TabletType: r.tablet.Type,
+		}, r.query, make(map[string]*querypb.BindVariable), r.txID, nil)
+	}
 
 	// Read the fields information.
 	cols, err := stream.Recv()
 	if err != nil {
-		return true /* retryable */, fmt.Errorf("cannot read Fields for query '%v': %v", r.query, err)
+		return true /* retryable */, vterrors.Wrapf(err, "cannot read Fields for query '%v'", r.query)
 	}
 	r.fields = cols.Fields
 	r.output = stream
@@ -170,7 +229,7 @@ func (r *RestartableResultReader) nextWithRetries() (*sqltypes.Result, error) {
 	retryCtx, retryCancel := context.WithTimeout(r.ctx, *retryDuration)
 	defer retryCancel()
 
-	// Note: The first retry will be the second attempt.
+	// The first retry is the second attempt because we already tried once in Next()
 	attempt := 1
 	start := time.Now()
 	for {
@@ -189,7 +248,7 @@ func (r *RestartableResultReader) nextWithRetries() (*sqltypes.Result, error) {
 			retryable, err = r.getTablet()
 			if err != nil {
 				if !retryable {
-					r.logger.Errorf("table=%v chunk=%v: Failed to restart streaming query (attempt %d) and failover to a different tablet (%v) due to a non-retryable error: %v", r.td.Name, r.chunk, attempt, r.tablet, err)
+					r.logger.Errorf2(err, "table=%v chunk=%v: Failed to restart streaming query (attempt %d) and failover to a different tablet (%v) due to a non-retryable error", r.td.Name, r.chunk, attempt, r.tablet)
 					return nil, err
 				}
 				goto retry
@@ -201,7 +260,7 @@ func (r *RestartableResultReader) nextWithRetries() (*sqltypes.Result, error) {
 			retryable, err = r.startStream()
 			if err != nil {
 				if !retryable {
-					r.logger.Errorf("tablet=%v table=%v chunk=%v: Failed to restart streaming query (attempt %d) with query '%v' and stopped due to a non-retryable error: %v", topoproto.TabletAliasString(r.tablet.Alias), r.td.Name, r.chunk, attempt, r.query, err)
+					r.logger.Errorf2(err, "tablet=%v table=%v chunk=%v: Failed to restart streaming query (attempt %d) with query '%v' and stopped due to a non-retryable error", topoproto.TabletAliasString(r.tablet.Alias), r.td.Name, r.chunk, attempt, r.query)
 					return nil, err
 				}
 				goto retry
@@ -225,7 +284,7 @@ func (r *RestartableResultReader) nextWithRetries() (*sqltypes.Result, error) {
 	retry:
 		if attempt == 2 && !r.allowMultipleRetries {
 			// Offline source tablets must not be retried forever. Fail early.
-			return nil, fmt.Errorf("%v: first retry to restart the streaming query on the same tablet failed. We're failing at this point because we're not allowed to keep retrying. err: %v", r.tp.description(), err)
+			return nil, vterrors.Wrapf(err, "%v: first retry to restart the streaming query on the same tablet failed. We're failing at this point because we're not allowed to keep retrying. err", r.tp.description())
 		}
 
 		alias := "unknown"

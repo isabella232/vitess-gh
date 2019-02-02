@@ -25,13 +25,11 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"vitess.io/vitess/go/sqltypes"
-	"vitess.io/vitess/go/testfiles"
 	"vitess.io/vitess/go/vt/sqlparser"
 	"vitess.io/vitess/go/vt/tableacl"
 	"vitess.io/vitess/go/vt/vttablet/tabletserver/schema"
@@ -112,7 +110,7 @@ func TestPlan(t *testing.T) {
 }
 
 func TestCustom(t *testing.T) {
-	testSchemas := testfiles.Glob("tabletserver/*_schema.json")
+	testSchemas, _ := filepath.Glob("testdata/*_schema.json")
 	if len(testSchemas) == 0 {
 		t.Log("No schemas to test")
 		return
@@ -183,8 +181,6 @@ func TestDDLPlan(t *testing.T) {
 			t.Fatalf("Error marshalling %v", plan)
 		}
 		matchString(t, tcase.lineno, expected["Action"], plan.Action)
-		matchString(t, tcase.lineno, expected["TableName"], sqlparser.String(plan.TableName))
-		matchString(t, tcase.lineno, expected["NewName"], sqlparser.String(plan.NewName))
 	}
 }
 
@@ -327,8 +323,5 @@ func iterateExecFile(name string) (testCaseIterator chan testCase) {
 }
 
 func locateFile(name string) string {
-	if path.IsAbs(name) {
-		return name
-	}
-	return testfiles.Locate("tabletserver/" + name)
+	return "testdata/" + name
 }

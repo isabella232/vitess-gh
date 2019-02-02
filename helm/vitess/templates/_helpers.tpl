@@ -11,6 +11,17 @@
 {{end -}}
 {{- end -}}
 
+############################
+# Format a flag map into a command line (inline),
+# as expected by the golang 'flag' package.
+# Boolean flags must be given a value, such as "true" or "false".
+#############################
+{{- define "format-flags-inline" -}}
+{{- range $key, $value := . -}}
+-{{$key}}={{$value | quote}}{{" "}}
+{{- end -}}
+{{- end -}}
+
 #############################
 # Repeat a string N times, where N is the total number
 # of replicas. Len must be used on the calling end to
@@ -87,31 +98,38 @@ nodeAffinity:
 {{- end -}}
 
 #############################
-# mycnf exec
+# mycnf exec - expects extraMyCnf config map name
 #############################
 {{- define "mycnf-exec" -}}
 
 if [ "$VT_DB_FLAVOR" = "percona" ]; then
-  FLAVOR_MYCNF=/vt/config/mycnf/master_mysql56.cnf
+  MYSQL_FLAVOR=Percona
 
 elif [ "$VT_DB_FLAVOR" = "mysql" ]; then
-  FLAVOR_MYCNF=/vt/config/mycnf/master_mysql56.cnf
+  MYSQL_FLAVOR=MySQL56
 
 elif [ "$VT_DB_FLAVOR" = "mysql56" ]; then
-  FLAVOR_MYCNF=/vt/config/mycnf/master_mysql56.cnf
+  MYSQL_FLAVOR=MySQL56
 
 elif [ "$VT_DB_FLAVOR" = "maria" ]; then
-  FLAVOR_MYCNF=/vt/config/mycnf/master_mariadb.cnf
+  MYSQL_FLAVOR=MariaDB
 
 elif [ "$VT_DB_FLAVOR" = "mariadb" ]; then
-  FLAVOR_MYCNF=/vt/config/mycnf/master_mariadb.cnf
+  MYSQL_FLAVOR=MariaDB
 
 elif [ "$VT_DB_FLAVOR" = "mariadb103" ]; then
-  FLAVOR_MYCNF=/vt/config/mycnf/master_mariadb103.cnf
+  MYSQL_FLAVOR=MariaDB103
 
 fi
 
-export EXTRA_MY_CNF="$FLAVOR_MYCNF:/vtdataroot/tabletdata/report-host.cnf:/vt/config/mycnf/rbr.cnf"
+export MYSQL_FLAVOR
+export EXTRA_MY_CNF="/vtdataroot/tabletdata/report-host.cnf:/vt/config/mycnf/rbr.cnf"
+
+{{ if . }}
+for filename in /vt/userconfig/*.cnf; do
+  export EXTRA_MY_CNF="$EXTRA_MY_CNF:$filename"
+done
+{{ end }}
 
 {{- end -}}
 
@@ -146,6 +164,9 @@ export EXTRA_MY_CNF="$FLAVOR_MYCNF:/vtdataroot/tabletdata/report-host.cnf:/vt/co
 -s3_backup_storage_bucket=$VT_S3_BACKUP_STORAGE_BUCKET
 -s3_backup_storage_root=$VT_S3_BACKUP_STORAGE_ROOT
 -s3_backup_server_side_encryption=$VT_S3_BACKUP_SERVER_SIDE_ENCRYPTION
+
+    {{ else if eq .backup_storage_implementation "ceph" }}
+-ceph_backup_storage_config=$CEPH_CREDENTIALS_FILE
     {{ end }}
 
   {{ end }}
@@ -232,6 +253,12 @@ export EXTRA_MY_CNF="$FLAVOR_MYCNF:/vtdataroot/tabletdata/report-host.cnf:/vt/co
     secretName: {{ .s3Secret }}
     {{ end }}
 
+  {{ else if eq .backup_storage_implementation "ceph" }}
+
+- name: backup-creds
+  secret:
+    secretName: {{required ".cephSecret necessary to use backup_storage_implementation: ceph!" .cephSecret }}
+
   {{ end }}
 
 {{ end }}
@@ -258,6 +285,11 @@ export EXTRA_MY_CNF="$FLAVOR_MYCNF:/vtdataroot/tabletdata/report-host.cnf:/vt/co
 - name: backup-creds
   mountPath: /etc/secrets/creds
     {{ end }}
+
+  {{ else if eq .backup_storage_implementation "ceph" }}
+
+- name: backup-creds
+  mountPath: /etc/secrets/creds
 
   {{ end }}
 
@@ -290,8 +322,72 @@ export AWS_SHARED_CREDENTIALS_FILE=$credsPath
 cat $AWS_SHARED_CREDENTIALS_FILE
     {{ end }}
 
+  {{ else if eq .backup_storage_implementation "ceph" }}
+
+credsPath=/etc/secrets/creds/$(ls /etc/secrets/creds/ | head -1)
+export CEPH_CREDENTIALS_FILE=$credsPath
+cat $CEPH_CREDENTIALS_FILE
+
   {{ end }}
 
+{{ end }}
+
+{{- end -}}
+
+#############################
+# user config volume - expects config map name
+#############################
+{{- define "user-config-volume" -}}
+
+{{ if . }}
+
+- name: user-config
+  configMap:
+    name: {{ . }}
+
+{{ end }}
+
+{{- end -}}
+
+#############################
+# user config volumeMount - expects config map name
+#############################
+{{- define "user-config-volumeMount" -}}
+
+{{ if . }}
+
+- name: user-config
+  mountPath: /vt/userconfig
+
+{{ end }}
+
+{{- end -}}
+
+#############################
+# user secret volumes - expects list of secret names
+#############################
+{{- define "user-secret-volumes" -}}
+
+{{ if . }}
+{{- range . }}
+- name: user-secret-{{ . }}
+  secret:
+    secretName: {{ . }}
+{{- end }}
+{{ end }}
+
+{{- end -}}
+
+#############################
+# user secret volumeMounts - expects list of secret names
+#############################
+{{- define "user-secret-volumeMounts" -}}
+
+{{ if . }}
+{{- range . }}
+- name: user-secret-{{ . }}
+  mountPath: /vt/usersecrets/{{ . }}
+{{- end }}
 {{ end }}
 
 {{- end -}}

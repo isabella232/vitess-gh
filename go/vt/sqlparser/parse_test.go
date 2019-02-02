@@ -533,6 +533,12 @@ var (
 	}, {
 		input: "select /* interval keyword */ adddate('2008-01-02', interval 1 year) from t",
 	}, {
+		input:  "select /* TIMESTAMPADD */ TIMESTAMPADD(MINUTE, 1, '2008-01-04') from t",
+		output: "select /* TIMESTAMPADD */ timestampadd(MINUTE, 1, '2008-01-04') from t",
+	}, {
+		input:  "select /* TIMESTAMPDIFF */ TIMESTAMPDIFF(MINUTE, '2008-01-02', '2008-01-04') from t",
+		output: "select /* TIMESTAMPDIFF */ timestampdiff(MINUTE, '2008-01-02', '2008-01-04') from t",
+	}, {
 		input: "select /* dual */ 1 from dual",
 	}, {
 		input:  "select /* Dual */ 1 from Dual",
@@ -573,6 +579,9 @@ var (
 		output: "select 1 from t",
 	}, {
 		input: "select /* dual */ 1 from dual",
+	}, {
+		input:  "select * from (select 'tables') tables",
+		output: "select * from (select 'tables' from dual) as `tables`",
 	}, {
 		input: "insert /* simple */ into a values (1)",
 	}, {
@@ -663,6 +672,8 @@ var (
 	}, {
 		input:  "update foo f join bar b on f.name = b.name set f.id = b.id where b.name = 'test'",
 		output: "update foo as f join bar as b on f.name = b.name set f.id = b.id where b.name = 'test'",
+	}, {
+		input: "update /* ignore */ ignore a set b = 3",
 	}, {
 		input: "delete /* simple */ from a",
 	}, {
@@ -898,37 +909,6 @@ var (
 		input:  "alter table a drop id",
 		output: "alter table a",
 	}, {
-		input: "alter table a add vindex hash (id)",
-	}, {
-		input:  "alter table a add vindex `hash` (`id`)",
-		output: "alter table a add vindex hash (id)",
-	}, {
-		input:  "alter table a add vindex hash (id) using `hash`",
-		output: "alter table a add vindex hash (id) using hash",
-	}, {
-		input: "alter table a add vindex `add` (`add`)",
-	}, {
-		input: "alter table a add vindex hash (id) using hash",
-	}, {
-		input:  "alter table a add vindex hash (id) using `hash`",
-		output: "alter table a add vindex hash (id) using hash",
-	}, {
-		input: "alter table user add vindex name_lookup_vdx (name) using lookup_hash with owner=user, table=name_user_idx, from=name, to=user_id",
-	}, {
-		input:  "alter table user2 add vindex name_lastname_lookup_vdx (name,lastname) using lookup with owner=`user`, table=`name_lastname_keyspace_id_map`, from=`name,lastname`, to=`keyspace_id`",
-		output: "alter table user2 add vindex name_lastname_lookup_vdx (name, lastname) using lookup with owner=user, table=name_lastname_keyspace_id_map, from=name,lastname, to=keyspace_id",
-	}, {
-		input: "alter table a drop vindex hash",
-	}, {
-		input:  "alter table a drop vindex `hash`",
-		output: "alter table a drop vindex hash",
-	}, {
-		input:  "alter table a drop vindex hash",
-		output: "alter table a drop vindex hash",
-	}, {
-		input:  "alter table a drop vindex `add`",
-		output: "alter table a drop vindex `add`",
-	}, {
 		input: "create table a",
 	}, {
 		input:  "create table a (\n\t`a` int\n)",
@@ -945,11 +925,48 @@ var (
 		input:  "create table a (a int, b char, c garbage)",
 		output: "create table a",
 	}, {
-		input: "create vindex hash_vdx using hash",
+		input: "alter vschema create vindex hash_vdx using hash",
 	}, {
-		input: "create vindex lookup_vdx using lookup with owner=user, table=name_user_idx, from=name, to=user_id",
+		input: "alter vschema create vindex lookup_vdx using lookup with owner=user, table=name_user_idx, from=name, to=user_id",
 	}, {
-		input: "create vindex xyz_vdx using xyz with param1=hello, param2='world', param3=123",
+		input: "alter vschema create vindex xyz_vdx using xyz with param1=hello, param2='world', param3=123",
+	}, {
+		input: "alter vschema drop vindex hash_vdx",
+	}, {
+		input: "alter vschema add table a",
+	}, {
+		input: "alter vschema drop table a",
+	}, {
+		input: "alter vschema on a add vindex hash (id)",
+	}, {
+		input:  "alter vschema on a add vindex `hash` (`id`)",
+		output: "alter vschema on a add vindex hash (id)",
+	}, {
+		input:  "alter vschema on a add vindex hash (id) using `hash`",
+		output: "alter vschema on a add vindex hash (id) using hash",
+	}, {
+		input: "alter vschema on a add vindex `add` (`add`)",
+	}, {
+		input: "alter vschema on a add vindex hash (id) using hash",
+	}, {
+		input:  "alter vschema on a add vindex hash (id) using `hash`",
+		output: "alter vschema on a add vindex hash (id) using hash",
+	}, {
+		input: "alter vschema on user add vindex name_lookup_vdx (name) using lookup_hash with owner=user, table=name_user_idx, from=name, to=user_id",
+	}, {
+		input:  "alter vschema on user2 add vindex name_lastname_lookup_vdx (name,lastname) using lookup with owner=`user`, table=`name_lastname_keyspace_id_map`, from=`name,lastname`, to=`keyspace_id`",
+		output: "alter vschema on user2 add vindex name_lastname_lookup_vdx (name, lastname) using lookup with owner=user, table=name_lastname_keyspace_id_map, from=name,lastname, to=keyspace_id",
+	}, {
+		input: "alter vschema on a drop vindex hash",
+	}, {
+		input:  "alter vschema on a drop vindex `hash`",
+		output: "alter vschema on a drop vindex hash",
+	}, {
+		input:  "alter vschema on a drop vindex hash",
+		output: "alter vschema on a drop vindex hash",
+	}, {
+		input:  "alter vschema on a drop vindex `add`",
+		output: "alter vschema on a drop vindex `add`",
 	}, {
 		input:  "create index a on b",
 		output: "alter table b",
@@ -975,11 +992,20 @@ var (
 		input:  "alter view a",
 		output: "alter table a",
 	}, {
+		input:  "rename table a to b",
+		output: "rename table a to b",
+	}, {
+		input:  "rename table a to b, b to c",
+		output: "rename table a to b, b to c",
+	}, {
 		input:  "drop view a",
 		output: "drop table a",
 	}, {
 		input:  "drop table a",
 		output: "drop table a",
+	}, {
+		input:  "drop table a, b",
+		output: "drop table a, b",
 	}, {
 		input:  "drop table if exists a",
 		output: "drop table if exists a",
@@ -993,6 +1019,12 @@ var (
 		input:  "analyze table a",
 		output: "alter table a",
 	}, {
+		input:  "flush tables",
+		output: "flush",
+	}, {
+		input:  "flush tables with read lock",
+		output: "flush",
+	}, {
 		input:  "show binary logs",
 		output: "show binary logs",
 	}, {
@@ -1000,10 +1032,16 @@ var (
 		output: "show binlog",
 	}, {
 		input:  "show character set",
-		output: "show character set",
+		output: "show charset",
 	}, {
 		input:  "show character set like '%foo'",
-		output: "show character set",
+		output: "show charset",
+	}, {
+		input:  "show charset",
+		output: "show charset",
+	}, {
+		input:  "show charset like '%foo'",
+		output: "show charset",
 	}, {
 		input:  "show collation",
 		output: "show collation",
@@ -1169,22 +1207,23 @@ var (
 		input:  "show session variables",
 		output: "show session variables",
 	}, {
-		input:  "show vindexes",
-		output: "show vindexes",
-	}, {
-		input:  "show vindexes on t",
-		output: "show vindexes on t",
-	}, {
 		input: "show vitess_keyspaces",
 	}, {
 		input: "show vitess_shards",
 	}, {
 		input: "show vitess_tablets",
 	}, {
-		input: "show vschema_tables",
+		input: "show vschema tables",
+	}, {
+		input: "show vschema vindexes",
+	}, {
+		input: "show vschema vindexes on t",
 	}, {
 		input:  "show warnings",
 		output: "show warnings",
+	}, {
+		input:  "select warnings from t",
+		output: "select `warnings` from t",
 	}, {
 		input:  "show foobar",
 		output: "show foobar",
@@ -1726,7 +1765,7 @@ func TestSubStr(t *testing.T) {
 		input  string
 		output string
 	}{{
-		input: "select substr(a, 1) from t",
+		input: `select substr('foobar', 1) from t`,
 	}, {
 		input: "select substr(a, 1, 6) from t",
 	}, {
@@ -1741,6 +1780,12 @@ func TestSubStr(t *testing.T) {
 	}, {
 		input:  "select substring(a from 1 for 6) from t",
 		output: "select substr(a, 1, 6) from t",
+	}, {
+		input:  `select substr("foo" from 1 for 2) from t`,
+		output: `select substr('foo', 1, 2) from t`,
+	}, {
+		input:  `select substring("foo", 1, 2) from t`,
+		output: `select substr('foo', 1, 2) from t`,
 	}}
 
 	for _, tcase := range validSQL {
@@ -2222,6 +2267,40 @@ var (
 
 func TestErrors(t *testing.T) {
 	for _, tcase := range invalidSQL {
+		_, err := Parse(tcase.input)
+		if err == nil || err.Error() != tcase.output {
+			t.Errorf("%s: %v, want %s", tcase.input, err, tcase.output)
+		}
+	}
+}
+
+// TestSkipToEnd tests that the skip to end functionality
+// does not skip past a ';'. If any tokens exist after that, Parse
+// should return an error.
+func TestSkipToEnd(t *testing.T) {
+	testcases := []struct {
+		input  string
+		output string
+	}{{
+		// This is the case where the partial ddl will be reset
+		// because of a premature ';'.
+		input:  "create table a(id; select * from t",
+		output: "syntax error at position 19",
+	}, {
+		// Partial DDL should get reset for valid DDLs also.
+		input:  "create table a(id int); select * from t",
+		output: "syntax error at position 31 near 'select'",
+	}, {
+		// Partial DDL does not get reset here. But we allow the
+		// DDL only if there are no new tokens after skipping to end.
+		input:  "create table a bb cc; select * from t",
+		output: "extra characters encountered after end of DDL: 'select'",
+	}, {
+		// Test that we don't step at ';' inside strings.
+		input:  "create table a bb 'a;'; select * from t",
+		output: "extra characters encountered after end of DDL: 'select'",
+	}}
+	for _, tcase := range testcases {
 		_, err := Parse(tcase.input)
 		if err == nil || err.Error() != tcase.output {
 			t.Errorf("%s: %v, want %s", tcase.input, err, tcase.output)

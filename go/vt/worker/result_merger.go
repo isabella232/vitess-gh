@@ -21,6 +21,9 @@ import (
 	"fmt"
 	"io"
 
+	"golang.org/x/net/context"
+	"vitess.io/vitess/go/vt/vterrors"
+
 	"github.com/golang/protobuf/proto"
 
 	"vitess.io/vitess/go/sqltypes"
@@ -66,11 +69,9 @@ func NewResultMerger(inputs []ResultReader, pkFieldCount int) (*ResultMerger, er
 		return nil, err
 	}
 
-	for i := 0; i < pkFieldCount; i++ {
-		typ := fields[i].Type
-		if !sqltypes.IsIntegral(typ) && !sqltypes.IsFloat(typ) && !sqltypes.IsBinary(typ) {
-			return nil, fmt.Errorf("unsupported type: %v cannot compare fields with this type. Use the vtworker LegacySplitClone command instead", typ)
-		}
+	err := CheckValidTypesForResultMerger(fields, pkFieldCount)
+	if err != nil {
+		return nil, fmt.Errorf("invalid PK types for ResultMerger. Use the vtworker LegacySplitClone command instead. %v", err.Error())
 	}
 
 	// Initialize the priority queue with all input ResultReader which have at
@@ -83,7 +84,7 @@ func NewResultMerger(inputs []ResultReader, pkFieldCount int) (*ResultMerger, er
 			if err == io.EOF {
 				continue
 			}
-			return nil, fmt.Errorf("failed to read from input at index: %v ResultReader: %v err: %v", i, input, err)
+			return nil, vterrors.Wrapf(err, "failed to read from input at index: %v ResultReader: %v err", i, input)
 		}
 		activeInputs = append(activeInputs, input)
 		heap.Push(nextRowHeap, nextRow)
@@ -96,6 +97,17 @@ func NewResultMerger(inputs []ResultReader, pkFieldCount int) (*ResultMerger, er
 	}
 	rm.reset()
 	return rm, nil
+}
+
+// CheckValidTypesForResultMerger returns an error if the provided fields are not compatible with how ResultMerger works
+func CheckValidTypesForResultMerger(fields []*querypb.Field, pkFieldCount int) error {
+	for i := 0; i < pkFieldCount; i++ {
+		typ := fields[i].Type
+		if !sqltypes.IsIntegral(typ) && !sqltypes.IsFloat(typ) && !sqltypes.IsBinary(typ) {
+			return fmt.Errorf("unsupported type: %v cannot compare fields with this type", typ)
+		}
+	}
+	return nil
 }
 
 // Fields returns the field information for the columns in the result.
@@ -149,7 +161,7 @@ func (rm *ResultMerger) Next() (*sqltypes.Result, error) {
 				rm.lastRowReaderDrained = true
 				break
 			} else {
-				return nil, fmt.Errorf("failed to read from input ResultReader: %v err: %v", next.input, err)
+				return nil, vterrors.Wrapf(err, "failed to read from input ResultReader: %v err", next.input)
 			}
 		}
 		// Input has more rows. Add it back to the priority queue.
@@ -165,6 +177,15 @@ func (rm *ResultMerger) Next() (*sqltypes.Result, error) {
 
 	return result, nil
 }
+
+// Close closes all inputs
+func (rm *ResultMerger) Close(ctx context.Context) {
+	for _, i := range rm.inputs {
+		i.Close(ctx)
+	}
+}
+
+
 
 func (rm *ResultMerger) deleteInput(deleteMe ResultReader) {
 	for i, input := range rm.inputs {

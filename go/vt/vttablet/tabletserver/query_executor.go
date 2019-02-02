@@ -106,6 +106,17 @@ func (qre *QueryExecutor) Execute() (reply *sqltypes.Result, err error) {
 		return qre.execDDL()
 	case planbuilder.PlanNextval:
 		return qre.execNextval()
+	case planbuilder.PlanSelectImpossible:
+		if qre.plan.Fields != nil {
+			return &sqltypes.Result{
+				Fields:       qre.plan.Fields,
+				RowsAffected: 0,
+				InsertID:     0,
+				Rows:         nil,
+				Extras:       nil,
+			}, nil
+		}
+		break
 	}
 
 	if qre.transactionID != 0 {
@@ -137,7 +148,7 @@ func (qre *QueryExecutor) Execute() (reply *sqltypes.Result, err error) {
 			return qre.execUpsertPK(conn)
 		case planbuilder.PlanSet:
 			return qre.txFetch(conn, qre.plan.FullQuery, qre.bindVars, nil, nil, true, true)
-		case planbuilder.PlanPassSelect, planbuilder.PlanSelectLock:
+		case planbuilder.PlanPassSelect, planbuilder.PlanSelectLock, planbuilder.PlanSelectImpossible:
 			return qre.execDirect(conn)
 		default:
 			// handled above:
@@ -151,7 +162,7 @@ func (qre *QueryExecutor) Execute() (reply *sqltypes.Result, err error) {
 		}
 	} else {
 		switch qre.plan.PlanID {
-		case planbuilder.PlanPassSelect:
+		case planbuilder.PlanPassSelect, planbuilder.PlanSelectImpossible:
 			return qre.execSelect()
 		case planbuilder.PlanSelectLock:
 			return nil, vterrors.Errorf(vtrpcpb.Code_FAILED_PRECONDITION, "%s disallowed outside transaction", qre.plan.PlanID.String())
@@ -209,11 +220,23 @@ func (qre *QueryExecutor) Stream(callback func(*sqltypes.Result) error) error {
 		return err
 	}
 
-	conn, err := qre.getStreamConn()
-	if err != nil {
-		return err
+	// if we have a transaction id, let's use the txPool for this query
+	var conn *connpool.DBConn
+	if qre.transactionID != 0 {
+		txConn, err := qre.tsv.te.txPool.Get(qre.transactionID, "for streaming query")
+		if err != nil {
+			return err
+		}
+		defer txConn.Recycle()
+		conn = txConn.DBConn
+	} else {
+		dbConn, err := qre.getStreamConn()
+		if err != nil {
+			return err
+		}
+		defer dbConn.Recycle()
+		conn = dbConn
 	}
-	defer conn.Recycle()
 
 	qd := NewQueryDetail(qre.logStats.Ctx, conn)
 	qre.tsv.qe.streamQList.Add(qd)
@@ -326,6 +349,11 @@ func (qre *QueryExecutor) checkPermissions() error {
 		return vterrors.Errorf(vtrpcpb.Code_FAILED_PRECONDITION, "disallowed due to rule: %s", desc)
 	}
 
+	// Skip ACL check for queries against the dummy dual table
+	if qre.plan.TableName().String() == "dual" {
+		return nil
+	}
+
 	// Skip the ACL check if the connecting user is an exempted superuser.
 	// Necessary to whitelist e.g. direct vtworker access.
 	if qre.tsv.qe.exemptACL != nil && qre.tsv.qe.exemptACL.IsMember(&querypb.VTGateCallerID{Username: username}) {
@@ -395,7 +423,12 @@ func (qre *QueryExecutor) execDDL() (*sqltypes.Result, error) {
 		return nil, vterrors.Errorf(vtrpcpb.Code_INVALID_ARGUMENT, "DDL is not understood")
 	}
 
-	defer qre.tsv.se.Reload(qre.ctx)
+	defer func() {
+		err := qre.tsv.se.Reload(qre.ctx)
+		if err != nil {
+			log.Errorf("failed to reload schema %v", err)
+		}
+	}()
 
 	if qre.transactionID != 0 {
 		conn, err := qre.tsv.te.txPool.Get(qre.transactionID, "DDL begin again")
@@ -450,7 +483,7 @@ func (qre *QueryExecutor) execNextval() (*sqltypes.Result, error) {
 			}
 			nextID, err := sqltypes.ToInt64(qr.Rows[0][0])
 			if err != nil {
-				return nil, fmt.Errorf("error loading sequence %s: %v", tableName, err)
+				return nil, vterrors.Wrapf(err, "error loading sequence %s", tableName)
 			}
 			// Initialize SequenceInfo.NextVal if it wasn't already.
 			if t.SequenceInfo.NextVal == 0 {
@@ -458,7 +491,7 @@ func (qre *QueryExecutor) execNextval() (*sqltypes.Result, error) {
 			}
 			cache, err := sqltypes.ToInt64(qr.Rows[0][1])
 			if err != nil {
-				return nil, fmt.Errorf("error loading sequence %s: %v", tableName, err)
+				return nil, vterrors.Wrapf(err, "error loading sequence %s", tableName)
 			}
 			if cache < 1 {
 				return nil, fmt.Errorf("invalid cache value for sequence %s: %d", tableName, cache)

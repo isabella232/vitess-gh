@@ -880,14 +880,25 @@ primary key (name)
     # use vtworker to compare the data (after health-checking the destination
     # rdonly tablets so discovery works)
     utils.run_vtctl(['RunHealthCheck', shard_3_rdonly1.tablet_alias])
-    logging.debug('Running vtworker SplitDiff')
-    utils.run_vtworker(['-cell', 'test_nj',
-                        '--use_v3_resharding_mode=false',
-                        'SplitDiff',
-                        '--exclude_tables', 'unrelated',
-                        '--min_healthy_rdonly_tablets', '1',
-                        'test_keyspace/c0-'],
-                       auto_log=True)
+
+    if base_sharding.use_multi_split_diff:
+        logging.debug('Running vtworker MultiSplitDiff')
+        utils.run_vtworker(['-cell', 'test_nj',
+                            '--use_v3_resharding_mode=false',
+                            'MultiSplitDiff',
+                            '--exclude_tables', 'unrelated',
+                            '--min_healthy_rdonly_tablets', '1',
+                            'test_keyspace/80-'],
+                           auto_log=True)
+    else:
+        logging.debug('Running vtworker SplitDiff')
+        utils.run_vtworker(['-cell', 'test_nj',
+                            '--use_v3_resharding_mode=false',
+                            'SplitDiff',
+                            '--exclude_tables', 'unrelated',
+                            '--min_healthy_rdonly_tablets', '1',
+                            'test_keyspace/c0-'],
+                           auto_log=True)
     utils.run_vtctl(['ChangeSlaveType', shard_1_rdonly1.tablet_alias, 'rdonly'],
                     auto_log=True)
     utils.run_vtctl(['ChangeSlaveType', shard_3_rdonly1.tablet_alias, 'rdonly'],
@@ -1067,14 +1078,25 @@ primary key (name)
     self._check_lots_timeout(3000, 80, 10, base=2000)
 
     # use vtworker to compare the data again
-    logging.debug('Running vtworker SplitDiff')
-    utils.run_vtworker(['-cell', 'test_nj',
-                        '--use_v3_resharding_mode=false',
-                        'SplitDiff',
-                        '--exclude_tables', 'unrelated',
-                        '--min_healthy_rdonly_tablets', '1',
-                        'test_keyspace/c0-'],
-                       auto_log=True)
+    if base_sharding.use_multi_split_diff:
+        logging.debug('Running vtworker MultiSplitDiff')
+        utils.run_vtworker(['-cell', 'test_nj',
+                            '--use_v3_resharding_mode=false',
+                            'MultiSplitDiff',
+                            '--exclude_tables', 'unrelated',
+                            '--min_healthy_rdonly_tablets', '1',
+                            'test_keyspace/80-'],
+                           auto_log=True)
+    else:
+        logging.debug('Running vtworker SplitDiff')
+        utils.run_vtworker(['-cell', 'test_nj',
+                          '--use_v3_resharding_mode=false',
+                          'SplitDiff',
+                          '--exclude_tables', 'unrelated',
+                          '--min_healthy_rdonly_tablets', '1',
+                          'test_keyspace/c0-'],
+                         auto_log=True)
+
     utils.run_vtctl(['ChangeSlaveType', shard_1_rdonly1.tablet_alias, 'rdonly'],
                     auto_log=True)
     utils.run_vtctl(['ChangeSlaveType', shard_3_rdonly1.tablet_alias, 'rdonly'],
@@ -1101,6 +1123,10 @@ primary key (name)
     utils.run_vtctl(['SourceShardAdd', '--key_range=80-',
                      'test_keyspace/c0-', '1', 'test_keyspace/80-'],
                     auto_log=True)
+
+    # CancelResharding should fail because migration has started.
+    utils.run_vtctl(['CancelResharding', 'test_keyspace/80-'],
+                    auto_log=True, expect_fail=True)
 
     # do a Migrate that will fail waiting for replication
     # which should cause the Migrate to be canceled and the source
@@ -1134,7 +1160,7 @@ primary key (name)
                      auto_log=True, expect_fail=True)
     utils.check_tablet_query_service(self, shard_1_master, False, True)
 
-    # finally, do the Migration that's expected to succeed
+    # do the migration that's expected to succeed
     utils.run_vtctl(['MigrateServedTypes', 'test_keyspace/80-', 'master'],
                     auto_log=True)
     utils.check_srv_keyspace('test_nj', 'test_keyspace',
@@ -1148,6 +1174,36 @@ primary key (name)
     # check the binlog players are gone now
     self.check_no_binlog_player(shard_2_master)
     self.check_no_binlog_player(shard_3_master)
+
+    # test reverse_replication
+    # start with inserting a row in each destination shard
+    self._insert_value(shard_2_master, 'resharding2', 2, 'msg2',
+                       0x9000000000000000)
+    self._insert_value(shard_3_master, 'resharding2', 3, 'msg3',
+                       0xD000000000000000)
+    # ensure the rows are not present yet
+    self._check_value(shard_1_master, 'resharding2', 2, 'msg2',
+                      0x9000000000000000, should_be_here=False)
+    self._check_value(shard_1_master, 'resharding2', 3, 'msg3',
+                      0xD000000000000000, should_be_here=False)
+    # repeat the migration with reverse_replication
+    utils.run_vtctl(['MigrateServedTypes', '-reverse_replication=true',
+                     'test_keyspace/80-', 'master'], auto_log=True)
+    # look for the rows in the original master after a short wait
+    time.sleep(1.0)
+    self._check_value(shard_1_master, 'resharding2', 2, 'msg2',
+                      0x9000000000000000)
+    self._check_value(shard_1_master, 'resharding2', 3, 'msg3',
+                      0xD000000000000000)
+
+    # retry the migration to ensure it now fails
+    utils.run_vtctl(['MigrateServedTypes', '-reverse_replication=true',
+                     'test_keyspace/80-', 'master'],
+                    auto_log=True, expect_fail=True)
+
+    # CancelResharding should now succeed
+    utils.run_vtctl(['CancelResharding', 'test_keyspace/80-'], auto_log=True)
+    self.check_no_binlog_player(shard_1_master)
 
     # delete the original tablets in the original shard
     tablet.kill_tablets([shard_1_master, shard_1_slave1, shard_1_slave2,
