@@ -373,6 +373,16 @@ func (c *Conn) parseInitialHandshakePacket(data []byte) (uint32, []byte, error) 
 	if !ok {
 		return 0, nil, NewSQLError(CRVersionError, SSUnknownSQLState, "parseInitialHandshakePacket: packet has no protocol version")
 	}
+
+	// Server is allowed to immediately send ERR packet
+	if pver == ErrPacket {
+		errorCode, pos, _ := readUint16(data, pos)
+		// Normally there would be a 1-byte sql_state_marker field and a 5-byte
+		// sql_state field here, but docs say these will not be present in this case.
+		errorMsg, pos, _ := readEOFString(data, pos)
+		return 0, nil, NewSQLError(CRServerHandshakeErr, SSUnknownSQLState, "immediate error from server errorCode=%v errorMsg=%v", errorCode, errorMsg)
+	}
+
 	if pver != protocolVersion {
 		return 0, nil, NewSQLError(CRVersionError, SSUnknownSQLState, "bad protocol version: %v", pver)
 	}
@@ -387,7 +397,7 @@ func (c *Conn) parseInitialHandshakePacket(data []byte) (uint32, []byte, error) 
 	// Read the connection id.
 	c.ConnectionID, pos, ok = readUint32(data, pos)
 	if !ok {
-		return 0, nil, NewSQLError(CRMalformedPacket, SSUnknownSQLState, "parseInitialHandshakePacket: packet has no conneciton id")
+		return 0, nil, NewSQLError(CRMalformedPacket, SSUnknownSQLState, "parseInitialHandshakePacket: packet has no connection id")
 	}
 
 	// Read the first part of the auth-plugin-data
@@ -567,7 +577,7 @@ func (c *Conn) writeHandshakeResponse41(capabilities uint32, scrambledPassword [
 			1 + // Character set.
 			23 + // Reserved.
 			lenNullString(params.Uname) +
-			// length of scrambled passsword is handled below.
+			// length of scrambled password is handled below.
 			len(scrambledPassword) +
 			21 + // "mysql_native_password" string.
 			1 // terminating zero.

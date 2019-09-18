@@ -56,6 +56,9 @@ var (
 // JAEGER_AGENT_PORT
 func newJagerTracerFromEnv(serviceName string) (tracingService, io.Closer, error) {
 	cfg, err := config.FromEnv()
+	if err != nil {
+		return nil, nil, err
+	}
 	if cfg.ServiceName == "" {
 		cfg.ServiceName = serviceName
 	}
@@ -79,9 +82,23 @@ func newJagerTracerFromEnv(serviceName string) (tracingService, io.Closer, error
 
 	opentracing.SetGlobalTracer(tracer)
 
-	return openTracingService{tracer}, closer, nil
+	return openTracingService{Tracer: &jaegerTracer{actual: tracer}}, closer, nil
 }
 
 func init() {
 	tracingBackendFactories["opentracing-jaeger"] = newJagerTracerFromEnv
+}
+
+var _ tracer = (*jaegerTracer)(nil)
+
+type jaegerTracer struct {
+	actual opentracing.Tracer
+}
+
+func (*jaegerTracer) FromString(s string) (opentracing.SpanContext, error) {
+	return jaeger.ContextFromString(s)
+}
+
+func (jt *jaegerTracer) GetOpenTracingTracer() opentracing.Tracer {
+	return jt.actual
 }

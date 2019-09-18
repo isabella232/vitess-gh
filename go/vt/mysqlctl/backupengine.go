@@ -29,49 +29,164 @@ import (
 	"vitess.io/vitess/go/vt/logutil"
 	"vitess.io/vitess/go/vt/mysqlctl/backupstorage"
 	"vitess.io/vitess/go/vt/proto/vtrpc"
+	"vitess.io/vitess/go/vt/topo"
 	"vitess.io/vitess/go/vt/vterrors"
 )
 
 var (
 	// BackupEngineImplementation is the implementation to use for BackupEngine
-	backupEngineImplementation = flag.String("backup_engine_implementation", builtin, "which implementation to use for the backup method, builtin or xtrabackup")
+	backupEngineImplementation = flag.String("backup_engine_implementation", builtinBackupEngineName, "Specifies which implementation to use for creating new backups (builtin or xtrabackup). Restores will always be done with whichever engine created a given backup.")
 )
 
-// BackupEngine is the interface to the backup engine
+// BackupEngine is the interface to take a backup with a given engine.
 type BackupEngine interface {
-	ExecuteBackup(ctx context.Context, cnf *Mycnf, mysqld MysqlDaemon, logger logutil.Logger, bh backupstorage.BackupHandle, backupConcurrency int, hookExtraEnv map[string]string) (bool, error)
-	ExecuteRestore(ctx context.Context, cnf *Mycnf, mysqld MysqlDaemon, logger logutil.Logger, dir string, bhs []backupstorage.BackupHandle, restoreConcurrency int, hookExtraEnv map[string]string) (mysql.Position, error)
+	ExecuteBackup(ctx context.Context, params BackupParams, bh backupstorage.BackupHandle) (bool, error)
+	ShouldDrainForBackup() bool
 }
 
-// BackupEngineMap contains the registered implementations for BackupEngine
-var BackupEngineMap = make(map[string]BackupEngine)
+// BackupParams is the struct that holds all params passed to ExecuteBackup
+type BackupParams struct {
+	Cnf    *Mycnf
+	Mysqld MysqlDaemon
+	Logger logutil.Logger
+	// Concurrency is the value of -concurrency flag given to Backup command
+	// It determines how many files are processed in parallel
+	Concurrency int
+	// Extra env variables for pre-backup and post-backup transform hooks
+	HookExtraEnv map[string]string
+	// TopoServer, Keyspace and Shard are used to discover master tablet
+	TopoServer *topo.Server
+	Keyspace   string
+	Shard      string
+}
 
-// GetBackupEngine returns the current BackupEngine implementation.
-// Should be called after flags have been initialized.
+// RestoreParams is the struct that holds all params passed to ExecuteRestore
+type RestoreParams struct {
+	Cnf    *Mycnf
+	Mysqld MysqlDaemon
+	Logger logutil.Logger
+	// Concurrency is the value of -restore_concurrency flag (init restore parameter)
+	// It determines how many files are processed in parallel
+	Concurrency int
+	// Extra env variables for pre-restore and post-restore transform hooks
+	HookExtraEnv map[string]string
+	// Metadata to write into database after restore. See PopulateMetadataTables
+	LocalMetadata map[string]string
+	// DeleteBeforeRestore tells us whether existing data should be deleted before
+	// restoring. This is always set to false when starting a tablet with -restore_from_backup,
+	// but is set to true when executing a RestoreFromBackup command on an already running vttablet
+	DeleteBeforeRestore bool
+	// Name of the managed database / schema
+	DbName string
+	// Directory location to search for a usable backup
+	Dir string
+}
+
+// RestoreEngine is the interface to restore a backup with a given engine.
+type RestoreEngine interface {
+	ExecuteRestore(ctx context.Context, params RestoreParams, bh backupstorage.BackupHandle) (mysql.Position, error)
+}
+
+// BackupRestoreEngine is a combination of BackupEngine and RestoreEngine.
+type BackupRestoreEngine interface {
+	BackupEngine
+	RestoreEngine
+}
+
+// BackupRestoreEngineMap contains the registered implementations for
+// BackupEngine and RestoreEngine.
+var BackupRestoreEngineMap = make(map[string]BackupRestoreEngine)
+
+// GetBackupEngine returns the BackupEngine implementation that should be used
+// to create new backups.
+//
+// To restore a backup, you should instead get the appropriate RestoreEngine for
+// a particular backup by calling GetRestoreEngine().
+//
+// This must only be called after flags have been parsed.
 func GetBackupEngine() (BackupEngine, error) {
-	be, ok := BackupEngineMap[*backupEngineImplementation]
+	name := *backupEngineImplementation
+	be, ok := BackupRestoreEngineMap[name]
 	if !ok {
-		return nil, vterrors.New(vtrpc.Code_NOT_FOUND, "no registered implementation of BackupEngine")
+		return nil, vterrors.Errorf(vtrpc.Code_NOT_FOUND, "unknown BackupEngine implementation %q", name)
 	}
 	return be, nil
 }
 
-func findBackupToRestore(ctx context.Context, cnf *Mycnf, mysqld MysqlDaemon, logger logutil.Logger, dir string, bhs []backupstorage.BackupHandle, bm interface{}) (backupstorage.BackupHandle, error) {
+// GetRestoreEngine returns the RestoreEngine implementation to restore a given backup.
+// It reads the MANIFEST file from the backup to check which engine was used to create it.
+func GetRestoreEngine(ctx context.Context, backup backupstorage.BackupHandle) (RestoreEngine, error) {
+	manifest, err := GetBackupManifest(ctx, backup)
+	if err != nil {
+		return nil, vterrors.Wrap(err, "can't get backup MANIFEST")
+	}
+	engine := manifest.BackupMethod
+	if engine == "" {
+		// The builtin engine is the only one that ever left BackupMethod unset.
+		engine = builtinBackupEngineName
+	}
+	re, ok := BackupRestoreEngineMap[engine]
+	if !ok {
+		return nil, vterrors.Errorf(vtrpc.Code_NOT_FOUND, "can't restore backup created with %q engine; no such BackupEngine implementation is registered", manifest.BackupMethod)
+	}
+	return re, nil
+}
+
+// GetBackupManifest returns the common fields of the MANIFEST file for a given backup.
+func GetBackupManifest(ctx context.Context, backup backupstorage.BackupHandle) (*BackupManifest, error) {
+	manifest := &BackupManifest{}
+	if err := getBackupManifestInto(ctx, backup, manifest); err != nil {
+		return nil, err
+	}
+	return manifest, nil
+}
+
+// getBackupManifestInto fetches and decodes a MANIFEST file into the specified object.
+func getBackupManifestInto(ctx context.Context, backup backupstorage.BackupHandle, outManifest interface{}) error {
+	file, err := backup.ReadFile(ctx, backupManifestFileName)
+	if err != nil {
+		return vterrors.Wrap(err, "can't read MANIFEST")
+	}
+	defer file.Close()
+
+	if err := json.NewDecoder(file).Decode(outManifest); err != nil {
+		return vterrors.Wrap(err, "can't decode MANIFEST")
+	}
+	return nil
+}
+
+// BackupManifest defines the common fields in the MANIFEST file.
+// All backup engines must include at least these fields. They are free to add
+// their own custom fields by embedding this struct anonymously into their own
+// custom struct, as long as their custom fields don't have conflicting names.
+type BackupManifest struct {
+	// BackupMethod is the name of the backup engine that created this backup.
+	// If this is empty, the backup engine is assumed to be "builtin" since that
+	// was the only engine that ever left this field empty. All new backup
+	// engines are required to set this field to the backup engine name.
+	BackupMethod string
+
+	// Position is the replication position at which the backup was taken.
+	Position mysql.Position
+
+	// FinishedTime is the time (in RFC 3339 format, UTC) at which the backup finished, if known.
+	// Some backups may not set this field if they were created before the field was added.
+	FinishedTime string
+}
+
+// FindBackupToRestore returns a selected candidate backup to be restored.
+// It returns the most recent backup that is complete, meaning it has a valid
+// MANIFEST file.
+func FindBackupToRestore(ctx context.Context, cnf *Mycnf, mysqld MysqlDaemon, logger logutil.Logger, dir string, bhs []backupstorage.BackupHandle) (backupstorage.BackupHandle, error) {
 	var bh backupstorage.BackupHandle
 	var index int
 
 	for index = len(bhs) - 1; index >= 0; index-- {
 		bh = bhs[index]
-		rc, err := bh.ReadFile(ctx, backupManifest)
+		// Check that the backup MANIFEST exists and can be successfully decoded.
+		_, err := GetBackupManifest(ctx, bh)
 		if err != nil {
 			log.Warningf("Possibly incomplete backup %v in directory %v on BackupStorage: can't read MANIFEST: %v)", bh.Name(), dir, err)
-			continue
-		}
-
-		err = json.NewDecoder(rc).Decode(&bm)
-		rc.Close()
-		if err != nil {
-			log.Warningf("Possibly incomplete backup %v in directory %v on BackupStorage (cannot JSON decode MANIFEST: %v)", bh.Name(), dir, err)
 			continue
 		}
 

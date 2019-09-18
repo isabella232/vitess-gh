@@ -62,10 +62,13 @@ var (
 )
 
 const (
-	streamModeTar          = "tar"
-	xtrabackupBinaryName   = "xtrabackup"
-	xtrabackupBackupMethod = "xtrabackup"
-	xbstream               = "xbstream"
+	streamModeTar        = "tar"
+	xtrabackupBinaryName = "xtrabackup"
+	xtrabackupEngineName = "xtrabackup"
+	xbstream             = "xbstream"
+
+	// closeTimeout is the timeout for closing backup files after writing.
+	closeTimeout = 10 * time.Minute
 )
 
 // xtraBackupManifest represents a backup.
@@ -73,15 +76,11 @@ const (
 // whether the backup is compressed using gzip, and any extra
 // command line parameters used while invoking it.
 type xtraBackupManifest struct {
+	// BackupManifest is an anonymous embedding of the base manifest struct.
+	BackupManifest
+
 	// Name of the backup file
 	FileName string
-	// BackupMethod, set to xtrabackup
-	BackupMethod string
-	// Position at which the backup was taken
-	Position mysql.Position
-	// SkipCompress can be set if the backup files were not run
-	// through gzip.
-	SkipCompress bool
 	// Params are the parameters that backup was run with
 	Params string `json:"ExtraCommandLineParams"`
 	// StreamMode is the stream mode used to create this backup.
@@ -90,6 +89,12 @@ type xtraBackupManifest struct {
 	NumStripes int32
 	// StripeBlockSize is the size in bytes of each stripe block.
 	StripeBlockSize int32
+
+	// SkipCompress is true if the backup files were NOT run through gzip.
+	// The field is expressed as a negative because it will come through as
+	// false for backups that were created before the field existed, and those
+	// backups all had compression enabled.
+	SkipCompress bool
 }
 
 func (be *XtrabackupEngine) backupFileName() string {
@@ -104,9 +109,24 @@ func (be *XtrabackupEngine) backupFileName() string {
 	return fileName
 }
 
+func closeFile(wc io.WriteCloser, fileName string, logger logutil.Logger, finalErr *error) {
+	logger.Infof("Closing backup file %v", fileName)
+	if closeErr := wc.Close(); *finalErr == nil {
+		*finalErr = closeErr
+	} else if closeErr != nil {
+		// since we already have an error just log this
+		logger.Errorf("error closing file %v: %v", fileName, closeErr)
+	}
+}
+
 // ExecuteBackup returns a boolean that indicates if the backup is usable,
 // and an overall error.
-func (be *XtrabackupEngine) ExecuteBackup(ctx context.Context, cnf *Mycnf, mysqld MysqlDaemon, logger logutil.Logger, bh backupstorage.BackupHandle, backupConcurrency int, hookExtraEnv map[string]string) (complete bool, finalErr error) {
+func (be *XtrabackupEngine) ExecuteBackup(ctx context.Context, params BackupParams, bh backupstorage.BackupHandle) (complete bool, finalErr error) {
+	// extract all params from BackupParams
+	cnf := params.Cnf
+	mysqld := params.Mysqld
+	logger := params.Logger
+
 	if *xtrabackupUser == "" {
 		return false, vterrors.New(vtrpc.Code_INVALID_ARGUMENT, "xtrabackupUser must be specified.")
 	}
@@ -126,6 +146,59 @@ func (be *XtrabackupEngine) ExecuteBackup(ctx context.Context, cnf *Mycnf, mysql
 	flavor := pos.GTIDSet.Flavor()
 	logger.Infof("Detected MySQL flavor: %v", flavor)
 
+	backupFileName := be.backupFileName()
+	numStripes := int(*xtrabackupStripes)
+
+	// Perform backups in a separate function, so deferred calls to Close() are
+	// all done before we continue to write the MANIFEST. This ensures that we
+	// do not write the MANIFEST unless all files were closed successfully,
+	// maintaining the contract that a MANIFEST file should only exist if the
+	// backup was created successfully.
+	logger.Infof("Starting backup with %v stripe(s)", numStripes)
+	replicationPosition, err := be.backupFiles(ctx, cnf, logger, bh, backupFileName, numStripes, flavor)
+	if err != nil {
+		return false, err
+	}
+
+	// open the MANIFEST
+	logger.Infof("Writing backup MANIFEST")
+	mwc, err := bh.AddFile(ctx, backupManifestFileName, 0)
+	if err != nil {
+		return false, vterrors.Wrapf(err, "cannot add %v to backup", backupManifestFileName)
+	}
+	defer closeFile(mwc, backupManifestFileName, logger, &finalErr)
+
+	// JSON-encode and write the MANIFEST
+	bm := &xtraBackupManifest{
+		// Common base fields
+		BackupManifest: BackupManifest{
+			BackupMethod: xtrabackupEngineName,
+			Position:     replicationPosition,
+			FinishedTime: time.Now().UTC().Format(time.RFC3339),
+		},
+
+		// XtraBackup-specific fields
+		FileName:        backupFileName,
+		StreamMode:      *xtrabackupStreamMode,
+		SkipCompress:    !*backupStorageCompress,
+		Params:          *xtrabackupBackupFlags,
+		NumStripes:      int32(numStripes),
+		StripeBlockSize: int32(*xtrabackupStripeBlockSize),
+	}
+
+	data, err := json.MarshalIndent(bm, "", "  ")
+	if err != nil {
+		return false, vterrors.Wrapf(err, "cannot JSON encode %v", backupManifestFileName)
+	}
+	if _, err := mwc.Write([]byte(data)); err != nil {
+		return false, vterrors.Wrapf(err, "cannot write %v", backupManifestFileName)
+	}
+
+	logger.Infof("Backup completed")
+	return true, nil
+}
+
+func (be *XtrabackupEngine) backupFiles(ctx context.Context, cnf *Mycnf, logger logutil.Logger, bh backupstorage.BackupHandle, backupFileName string, numStripes int, flavor string) (replicationPosition mysql.Position, finalErr error) {
 	backupProgram := path.Join(*xtrabackupEnginePath, xtrabackupBinaryName)
 
 	flagsToExec := []string{"--defaults-file=" + cnf.path,
@@ -138,40 +211,61 @@ func (be *XtrabackupEngine) ExecuteBackup(ctx context.Context, cnf *Mycnf, mysql
 	if *xtrabackupStreamMode != "" {
 		flagsToExec = append(flagsToExec, "--stream="+*xtrabackupStreamMode)
 	}
-
 	if *xtrabackupBackupFlags != "" {
 		flagsToExec = append(flagsToExec, strings.Fields(*xtrabackupBackupFlags)...)
 	}
 
-	backupFileName := be.backupFileName()
-	numStripes := int(*xtrabackupStripes)
-
-	destFiles, err := addStripeFiles(ctx, bh, backupFileName, numStripes, logger)
+	// Create a cancellable Context for calls to bh.AddFile().
+	// This allows us to decide later if we need to cancel an attempt to Close()
+	// the file returned from AddFile(), since Close() itself does not accept a
+	// Context value. We can't use a context.WithTimeout() here because that
+	// would impose a timeout that starts counting right now, so it would
+	// include the time spent uploading the file content. We only want to impose
+	// a timeout on the final Close() step.
+	addFilesCtx, cancelAddFiles := context.WithCancel(ctx)
+	defer cancelAddFiles()
+	destFiles, err := addStripeFiles(addFilesCtx, bh, backupFileName, numStripes, logger)
 	if err != nil {
-		return false, vterrors.Wrapf(err, "cannot create backup file %v", backupFileName)
-	}
-	closeFile := func(wc io.WriteCloser, fileName string) {
-		if closeErr := wc.Close(); finalErr == nil {
-			finalErr = closeErr
-		} else if closeErr != nil {
-			// since we already have an error just log this
-			logger.Errorf("error closing file %v: %v", fileName, closeErr)
-		}
+		return replicationPosition, vterrors.Wrapf(err, "cannot create backup file %v", backupFileName)
 	}
 	defer func() {
-		for _, file := range destFiles {
-			closeFile(file, backupFileName)
+		// Impose a timeout on the process of closing files.
+		go func() {
+			timer := time.NewTimer(closeTimeout)
+
+			select {
+			case <-addFilesCtx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+				logger.Errorf("Timed out waiting for Close() on backup file to complete")
+				// Cancelling the Context that was originally passed to bh.AddFile()
+				// should hopefully cause Close() calls on the file that AddFile()
+				// returned to abort. If the underlying implementation doesn't
+				// respect cancellation of the AddFile() Context while inside
+				// Close(), then we just hang because it's unsafe to return and
+				// leave Close() running indefinitely in the background.
+				cancelAddFiles()
+			}
+		}()
+
+		filename := backupFileName
+		for i, file := range destFiles {
+			if numStripes > 1 {
+				filename = stripeFileName(backupFileName, i)
+			}
+			closeFile(file, filename, logger, &finalErr)
 		}
 	}()
 
 	backupCmd := exec.CommandContext(ctx, backupProgram, flagsToExec...)
 	backupOut, err := backupCmd.StdoutPipe()
 	if err != nil {
-		return false, vterrors.Wrap(err, "cannot create stdout pipe")
+		return replicationPosition, vterrors.Wrap(err, "cannot create stdout pipe")
 	}
 	backupErr, err := backupCmd.StderrPipe()
 	if err != nil {
-		return false, vterrors.Wrap(err, "cannot create stderr pipe")
+		return replicationPosition, vterrors.Wrap(err, "cannot create stderr pipe")
 	}
 
 	destWriters := []io.Writer{}
@@ -186,7 +280,7 @@ func (be *XtrabackupEngine) ExecuteBackup(ctx context.Context, cnf *Mycnf, mysql
 		if *backupStorageCompress {
 			compressor, err := pgzip.NewWriterLevel(writer, pgzip.BestSpeed)
 			if err != nil {
-				return false, vterrors.Wrap(err, "cannot create gzip compressor")
+				return replicationPosition, vterrors.Wrap(err, "cannot create gzip compressor")
 			}
 			compressor.SetConcurrency(*backupCompressBlockSize, *backupCompressBlocks)
 			writer = compressor
@@ -197,7 +291,7 @@ func (be *XtrabackupEngine) ExecuteBackup(ctx context.Context, cnf *Mycnf, mysql
 	}
 
 	if err = backupCmd.Start(); err != nil {
-		return false, vterrors.Wrap(err, "unable to start backup")
+		return replicationPosition, vterrors.Wrap(err, "unable to start backup")
 	}
 
 	// Read stderr in the background, so we can log progress as xtrabackup runs.
@@ -238,20 +332,20 @@ func (be *XtrabackupEngine) ExecuteBackup(ctx context.Context, cnf *Mycnf, mysql
 		blockSize = 1024
 	}
 	if _, err := copyToStripes(destWriters, backupOut, blockSize); err != nil {
-		return false, vterrors.Wrap(err, "cannot copy output from xtrabackup command")
+		return replicationPosition, vterrors.Wrap(err, "cannot copy output from xtrabackup command")
 	}
 
 	// Close compressor to flush it. After that all data is sent to the buffer.
 	for _, compressor := range destCompressors {
 		if err := compressor.Close(); err != nil {
-			return false, vterrors.Wrap(err, "cannot close gzip compressor")
+			return replicationPosition, vterrors.Wrap(err, "cannot close gzip compressor")
 		}
 	}
 
 	// Flush the buffer to finish writing on destination.
 	for _, buffer := range destBuffers {
 		if err = buffer.Flush(); err != nil {
-			return false, vterrors.Wrapf(err, "cannot flush destination: %v", backupFileName)
+			return replicationPosition, vterrors.Wrapf(err, "cannot flush destination: %v", backupFileName)
 		}
 	}
 
@@ -261,74 +355,44 @@ func (be *XtrabackupEngine) ExecuteBackup(ctx context.Context, cnf *Mycnf, mysql
 	sterrOutput := stderrBuilder.String()
 
 	if err := backupCmd.Wait(); err != nil {
-		return false, vterrors.Wrap(err, "xtrabackup failed with error")
+		return replicationPosition, vterrors.Wrap(err, "xtrabackup failed with error")
 	}
 
 	replicationPosition, rerr := findReplicationPosition(sterrOutput, flavor, logger)
 	if rerr != nil {
-		return false, vterrors.Wrap(rerr, "backup failed trying to find replication position")
-	}
-	// open the MANIFEST
-	mwc, err := bh.AddFile(ctx, backupManifest, 0)
-	if err != nil {
-		return false, vterrors.Wrapf(err, "cannot add %v to backup", backupManifest)
-	}
-	defer closeFile(mwc, backupManifest)
-
-	// JSON-encode and write the MANIFEST
-	bm := &xtraBackupManifest{
-		FileName:        backupFileName,
-		BackupMethod:    xtrabackupBackupMethod,
-		Position:        replicationPosition,
-		SkipCompress:    !*backupStorageCompress,
-		Params:          *xtrabackupBackupFlags,
-		NumStripes:      int32(numStripes),
-		StripeBlockSize: int32(*xtrabackupStripeBlockSize),
+		return replicationPosition, vterrors.Wrap(rerr, "backup failed trying to find replication position")
 	}
 
-	data, err := json.MarshalIndent(bm, "", "  ")
-	if err != nil {
-		return false, vterrors.Wrapf(err, "cannot JSON encode %v", backupManifest)
-	}
-	if _, err := mwc.Write([]byte(data)); err != nil {
-		return false, vterrors.Wrapf(err, "cannot write %v", backupManifest)
-	}
-
-	return true, nil
+	return replicationPosition, nil
 }
 
 // ExecuteRestore restores from a backup. Any error is returned.
-func (be *XtrabackupEngine) ExecuteRestore(
-	ctx context.Context,
-	cnf *Mycnf,
-	mysqld MysqlDaemon,
-	logger logutil.Logger,
-	dir string,
-	bhs []backupstorage.BackupHandle,
-	restoreConcurrency int,
-	hookExtraEnv map[string]string) (mysql.Position, error) {
+func (be *XtrabackupEngine) ExecuteRestore(ctx context.Context, params RestoreParams, bh backupstorage.BackupHandle) (mysql.Position, error) {
+
+	cnf := params.Cnf
+	mysqld := params.Mysqld
+	logger := params.Logger
 
 	zeroPosition := mysql.Position{}
 	var bm xtraBackupManifest
 
-	bh, err := findBackupToRestore(ctx, cnf, mysqld, logger, dir, bhs, &bm)
-	if err != nil {
+	if err := getBackupManifestInto(ctx, bh, &bm); err != nil {
 		return zeroPosition, err
 	}
 
 	// mark restore as in progress
-	if err = createStateFile(cnf); err != nil {
+	if err := createStateFile(cnf); err != nil {
 		return zeroPosition, err
 	}
 
-	if err = prepareToRestore(ctx, cnf, mysqld, logger); err != nil {
+	if err := prepareToRestore(ctx, cnf, mysqld, logger); err != nil {
 		return zeroPosition, err
 	}
 
 	// copy / extract files
 	logger.Infof("Restore: Extracting files from %v", bm.FileName)
 
-	if err = be.restoreFromBackup(ctx, cnf, bh, bm, logger); err != nil {
+	if err := be.restoreFromBackup(ctx, cnf, bh, bm, logger); err != nil {
 		// don't delete the file here because that is how we detect an interrupted restore
 		return zeroPosition, err
 	}
@@ -600,7 +664,9 @@ func addStripeFiles(ctx context.Context, backupHandle backupstorage.BackupHandle
 
 	files := []io.WriteCloser{}
 	for i := 0; i < numStripes; i++ {
-		file, err := backupHandle.AddFile(ctx, stripeFileName(baseFileName, i), 0)
+		filename := stripeFileName(baseFileName, i)
+		logger.Infof("Opening backup stripe file %v", filename)
+		file, err := backupHandle.AddFile(ctx, filename, 0)
 		if err != nil {
 			// Close any files we already opened and clear them from the result.
 			for _, file := range files {
@@ -730,6 +796,12 @@ func stripeReader(readers []io.Reader, blockSize int64) io.Reader {
 	return reader
 }
 
+// ShouldDrainForBackup satisfies the BackupEngine interface
+// xtrabackup can run while tablet is serving, hence false
+func (be *XtrabackupEngine) ShouldDrainForBackup() bool {
+	return false
+}
+
 func init() {
-	BackupEngineMap[xtrabackupBackupMethod] = &XtrabackupEngine{}
+	BackupRestoreEngineMap[xtrabackupEngineName] = &XtrabackupEngine{}
 }

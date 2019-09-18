@@ -19,8 +19,6 @@
 # Outline of this file.
 # 0. Initialization and helper methods.
 # 1. Installation of dependencies.
-# 2. Installation of Go tools and vendored Go dependencies.
-# 3. Detection of installed MySQL and setting MYSQL_FLAVOR.
 
 BUILD_TESTS=${BUILD_TESTS:-1}
 BUILD_PYTHON=${BUILD_PYTHON:-1}
@@ -46,15 +44,9 @@ mkdir -p "$VTROOT/bin"
 mkdir -p "$VTROOT/lib"
 mkdir -p "$VTROOT/vthook"
 
-# Install git hooks.
-echo "creating git hooks"
-mkdir -p "$VTTOP/.git/hooks"
-ln -sf "$VTTOP/misc/git/pre-commit" "$VTTOP/.git/hooks/pre-commit"
-ln -sf "$VTTOP/misc/git/commit-msg" "$VTTOP/.git/hooks/commit-msg"
-(cd "$VTTOP" && git config core.hooksPath "$VTTOP/.git/hooks")
+# This is required for VIRTUALENV
+# Used by Python below
 
-
-# Set up the proper GOPATH for go get below.
 if [ "$BUILD_TESTS" == 1 ] ; then
     source ./dev.env
 else
@@ -76,6 +68,14 @@ else
     ln -snf "$VTTOP/data" "$VTROOT/data"
     ln -snf "$VTTOP/go/vt/zkctl/zksrv.sh" "$VTROOT/bin/zksrv.sh"
 fi
+
+# git hooks are only required if someone intends to contribute.
+
+echo "creating git hooks"
+mkdir -p "$VTTOP/.git/hooks"
+ln -sf "$VTTOP/misc/git/pre-commit" "$VTTOP/.git/hooks/pre-commit"
+ln -sf "$VTTOP/misc/git/commit-msg" "$VTTOP/.git/hooks/commit-msg"
+(cd "$VTTOP" && git config core.hooksPath "$VTTOP/.git/hooks")
 
 # install_dep is a helper function to generalize the download and installation of dependencies.
 #
@@ -274,7 +274,6 @@ if [ "$BUILD_PYTHON" == 1 ] ; then
     install_dep "Selenium" "latest" "$VTROOT/dist/selenium" install_selenium
 fi
 
-
 # Download chromedriver (necessary to run test/vtctld_web_test.py).
 function install_chromedriver() {
   local version="$1"
@@ -286,81 +285,6 @@ function install_chromedriver() {
 }
 if [ "$BUILD_PYTHON" == 1 ] ; then
     install_dep "chromedriver" "73.0.3683.20" "$VTROOT/dist/chromedriver" install_chromedriver
-fi
-
-
-#
-# 2. Installation of Go tools and vendored Go dependencies.
-#
-
-
-# Install third-party Go tools used as part of the development workflow.
-#
-# DO NOT ADD LIBRARY DEPENDENCIES HERE. Instead use govendor as described below.
-#
-# Note: We explicitly do not vendor the tools below because a) we want to stay
-# on their latest version and b) it's easier to "go install" them this way.
-gotools=" \
-       github.com/golang/mock/mockgen \
-       github.com/kardianos/govendor \
-       golang.org/x/lint/golint \
-       golang.org/x/tools/cmd/cover \
-       golang.org/x/tools/cmd/goimports \
-       golang.org/x/tools/cmd/goyacc \
-"
-echo "Installing dev tools with 'go get'..."
-# shellcheck disable=SC2086
-go get -u $gotools || fail "Failed to download some Go tools with 'go get'. Please re-run bootstrap.sh in case of transient errors."
-
-# Download dependencies that are version-pinned via govendor.
-#
-# To add a new dependency, run:
-#   govendor fetch <package_path>
-#
-# Existing dependencies can be updated to the latest version with 'fetch' as well.
-#
-# Then:
-#   git add vendor/vendor.json
-#   git commit
-#
-# See https://github.com/kardianos/govendor for more options.
-echo "Updating govendor dependencies..."
-govendor sync || fail "Failed to download/update dependencies with govendor. Please re-run bootstrap.sh in case of transient errors."
-
-
-#
-# 3. Detection of installed MySQL and setting MYSQL_FLAVOR.
-#
-
-
-# find mysql and prepare to use libmysqlclient
-
-if [ "$BUILD_TESTS" == 1 ] ; then
-  if [ -z "$MYSQL_FLAVOR" ]; then
-    export MYSQL_FLAVOR=MySQL56
-    echo "MYSQL_FLAVOR environment variable not set. Using default: $MYSQL_FLAVOR"
-  fi
-  case "$MYSQL_FLAVOR" in
-    "MySQL56" | "MySQL80")
-      myversion="$("$VT_MYSQL_ROOT/bin/mysql" --version)"
-      [[ "$myversion" =~ Distrib\ 5\.[67] || "$myversion" =~ Ver\ 8\. ]] || fail "Couldn't find MySQL 5.6+ in $VT_MYSQL_ROOT. Set VT_MYSQL_ROOT to override search location."
-      echo "Found MySQL 5.6+ installation in $VT_MYSQL_ROOT."
-      ;;
-
-    "MariaDB" | "MariaDB103")
-      myversion="$("$VT_MYSQL_ROOT/bin/mysql" --version)"
-      [[ "$myversion" =~ MariaDB ]] || fail "Couldn't find MariaDB in $VT_MYSQL_ROOT. Set VT_MYSQL_ROOT to override search location."
-      echo "Found MariaDB installation in $VT_MYSQL_ROOT."
-      ;;
-
-    *)
-      fail "Unsupported MYSQL_FLAVOR $MYSQL_FLAVOR"
-      ;;
-
-  esac
-  # save the flavor that was used in bootstrap, so it can be restored
-  # every time dev.env is sourced.
-  echo "$MYSQL_FLAVOR" > "$VTROOT/dist/MYSQL_FLAVOR"
 fi
 
 if [ "$BUILD_PYTHON" == 1 ] ; then

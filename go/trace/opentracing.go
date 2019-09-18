@@ -16,10 +16,11 @@ limitations under the License.
 package trace
 
 import (
-	"github.com/opentracing-contrib/go-grpc"
+	otgrpc "github.com/opentracing-contrib/go-grpc"
 	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"vitess.io/vitess/go/vt/vterrors"
 )
 
 var _ Span = (*openTracingSpan)(nil)
@@ -40,18 +41,25 @@ func (js openTracingSpan) Annotate(key string, value interface{}) {
 
 var _ tracingService = (*openTracingService)(nil)
 
+type tracer interface {
+	GetOpenTracingTracer() opentracing.Tracer
+	FromString(string) (opentracing.SpanContext, error)
+}
+
 type openTracingService struct {
-	Tracer opentracing.Tracer
+	Tracer tracer
 }
 
 // AddGrpcServerOptions is part of an interface implementation
 func (jf openTracingService) AddGrpcServerOptions(addInterceptors func(s grpc.StreamServerInterceptor, u grpc.UnaryServerInterceptor)) {
-	addInterceptors(otgrpc.OpenTracingStreamServerInterceptor(jf.Tracer), otgrpc.OpenTracingServerInterceptor(jf.Tracer))
+	ot := jf.Tracer.GetOpenTracingTracer()
+	addInterceptors(otgrpc.OpenTracingStreamServerInterceptor(ot), otgrpc.OpenTracingServerInterceptor(ot))
 }
 
 // AddGrpcClientOptions is part of an interface implementation
 func (jf openTracingService) AddGrpcClientOptions(addInterceptors func(s grpc.StreamClientInterceptor, u grpc.UnaryClientInterceptor)) {
-	addInterceptors(otgrpc.OpenTracingStreamClientInterceptor(jf.Tracer), otgrpc.OpenTracingClientInterceptor(jf.Tracer))
+	ot := jf.Tracer.GetOpenTracingTracer()
+	addInterceptors(otgrpc.OpenTracingStreamClientInterceptor(ot), otgrpc.OpenTracingClientInterceptor(ot))
 }
 
 // NewClientSpan is part of an interface implementation
@@ -65,24 +73,32 @@ func (jf openTracingService) NewClientSpan(parent Span, serviceName, label strin
 func (jf openTracingService) New(parent Span, label string) Span {
 	var innerSpan opentracing.Span
 	if parent == nil {
-		innerSpan = jf.Tracer.StartSpan(label)
+		innerSpan = jf.Tracer.GetOpenTracingTracer().StartSpan(label)
 	} else {
 		jaegerParent := parent.(openTracingSpan)
 		span := jaegerParent.otSpan
-		innerSpan = jf.Tracer.StartSpan(label, opentracing.ChildOf(span.Context()))
+		innerSpan = jf.Tracer.GetOpenTracingTracer().StartSpan(label, opentracing.ChildOf(span.Context()))
 	}
 	return openTracingSpan{otSpan: innerSpan}
+}
+
+func (jf openTracingService) NewFromString(parent, label string) (Span, error) {
+	spanContext, err := jf.Tracer.FromString(parent)
+	if err != nil {
+		return nil, vterrors.Wrap(err, "failed to deserialize span context")
+	}
+	innerSpan := jf.Tracer.GetOpenTracingTracer().StartSpan(label, opentracing.ChildOf(spanContext))
+	return openTracingSpan{otSpan: innerSpan}, nil
 }
 
 // FromContext is part of an interface implementation
 func (jf openTracingService) FromContext(ctx context.Context) (Span, bool) {
 	innerSpan := opentracing.SpanFromContext(ctx)
 
-	if innerSpan != nil {
-		return openTracingSpan{otSpan: innerSpan}, true
-	} else {
+	if innerSpan == nil {
 		return nil, false
 	}
+	return openTracingSpan{otSpan: innerSpan}, true
 }
 
 // NewContext is part of an interface implementation

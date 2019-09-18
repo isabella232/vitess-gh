@@ -89,7 +89,7 @@ type Mysqld struct {
 	dbaPool *dbconnpool.ConnectionPool
 	appPool *dbconnpool.ConnectionPool
 
-	capabilities CapabilitySet
+	capabilities capabilitySet
 
 	// mutex protects the fields below.
 	mutex         sync.Mutex
@@ -115,17 +115,44 @@ func NewMysqld(dbcfgs *dbconfigs.DBConfigs) *Mysqld {
 	version, getErr := getVersionString()
 	f, v, err := parseVersionString(version)
 
-	// Fallback if required
+	/*
+	 By default Vitess searches in vtenv.VtMysqlRoot() for a mysqld binary.
+	 This is usually the VT_MYSQL_ROOT env, but if it is unset or empty, it
+	 will substitute VtRoot(). See go/vt/env/env.go.
+
+	 A number of subdirs inside vtenv.VtMysqlRoot() will be searched, see
+	 func binaryPath() for context. If no mysqld binary is found (possibly
+	 because it is in a container or both VT_MYSQL_ROOT and VTROOT are set
+	 incorrectly), there will be a fallback to using the MYSQL_FLAVOR env
+	 variable.
+
+	 If MYSQL_FLAVOR is not defined, there will be a panic.
+
+	 Note: relying on MySQL_FLAVOR is not recommended, since for historical
+	 purposes "MySQL56" actually means MySQL 5.7, which is a very strange
+	 behavior.
+	*/
+
 	if getErr != nil || err != nil {
 		f, v, err = getVersionFromEnv()
 		if err != nil {
-			panic("Could not detect version from mysqld --version or MYSQL_FLAVOR")
+			vtenvMysqlRoot, _ := vtenv.VtMysqlRoot()
+			message := fmt.Sprintf(`could not auto-detect MySQL version. You may need to set VT_MYSQL_ROOT so a mysqld binary can be found, or set the environment variable MYSQL_FLAVOR if mysqld is not available locally:
+	VT_MYSQL_ROOT: %s
+	VTROOT: %s
+	vtenv.VtMysqlRoot(): %s
+	MYSQL_FLAVOR: %s
+	`,
+				os.Getenv("VT_MYSQL_ROOT"),
+				os.Getenv("VTROOT"),
+				vtenvMysqlRoot,
+				os.Getenv("MYSQL_FLAVOR"))
+			panic(message)
 		}
-
 	}
 
 	log.Infof("Using flavor: %v, version: %v", f, v)
-	result.capabilities = NewCapabilitySet(f, v)
+	result.capabilities = newCapabilitySet(f, v)
 	return result
 }
 
@@ -151,7 +178,7 @@ func getVersionFromEnv() (flavor mysqlFlavor, ver serverVersion, err error) {
 	case "MySQL56":
 		return flavorMySQL, serverVersion{5, 7, 10}, nil
 	}
-	return flavor, ver, fmt.Errorf("Could not determine version from MYSQL_FLAVOR: %s", env)
+	return flavor, ver, fmt.Errorf("could not determine version from MYSQL_FLAVOR: %s", env)
 }
 
 func getVersionString() (string, error) {
@@ -183,19 +210,19 @@ func parseVersionString(version string) (flavor mysqlFlavor, ver serverVersion, 
 	}
 	v := versionRegex.FindStringSubmatch(version)
 	if len(v) != 4 {
-		return flavor, ver, fmt.Errorf("Could not parse server version from: %s", version)
+		return flavor, ver, fmt.Errorf("could not parse server version from: %s", version)
 	}
 	ver.Major, err = strconv.Atoi(string(v[1]))
 	if err != nil {
-		return flavor, ver, fmt.Errorf("Could not parse server version from: %s", version)
+		return flavor, ver, fmt.Errorf("could not parse server version from: %s", version)
 	}
 	ver.Minor, err = strconv.Atoi(string(v[2]))
 	if err != nil {
-		return flavor, ver, fmt.Errorf("Could not parse server version from: %s", version)
+		return flavor, ver, fmt.Errorf("could not parse server version from: %s", version)
 	}
 	ver.Patch, err = strconv.Atoi(string(v[3]))
 	if err != nil {
-		return flavor, ver, fmt.Errorf("Could not parse server version from: %s", version)
+		return flavor, ver, fmt.Errorf("could not parse server version from: %s", version)
 	}
 
 	return
@@ -216,7 +243,7 @@ func (mysqld *Mysqld) RunMysqlUpgrade() error {
 		return client.RunMysqlUpgrade(context.TODO())
 	}
 
-	if mysqld.capabilities.HasMySQLUpgradeInServer() {
+	if mysqld.capabilities.hasMySQLUpgradeInServer() {
 		log.Warningf("MySQL version has built-in upgrade, skipping RunMySQLUpgrade")
 		return nil
 	}
@@ -650,7 +677,7 @@ func (mysqld *Mysqld) installDataDir(cnf *Mycnf) error {
 	if err != nil {
 		return err
 	}
-	if mysqld.capabilities.HasInitializeInServer() {
+	if mysqld.capabilities.hasInitializeInServer() {
 		log.Infof("Installing data dir with mysqld --initialize-insecure")
 		args := []string{
 			"--defaults-file=" + cnf.path,
@@ -736,7 +763,7 @@ func (mysqld *Mysqld) getMycnfTemplates(root string) []string {
 	// Percona Server == MySQL in this context
 
 	f := flavorMariaDB
-	if mysqld.capabilities.IsMySQLLike() {
+	if mysqld.capabilities.isMySQLLike() {
 		f = flavorMySQL
 	}
 
